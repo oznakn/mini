@@ -59,8 +59,16 @@ pub enum Statement<'input> {
         variable: VariableDefinition<'input>,
         expression: Option<Expression<'input>>,
     },
+    BodyStatement {
+        statements: Vec<Statement<'input>>,
+    },
+    FunctionStatement {
+        identifier: &'input str,
+        parameters: Vec<VariableDefinition<'input>>,
+        statements: Vec<Statement<'input>>,
+    },
     ExportStatement {
-        expression: Expression<'input>,
+        statement: Box<Statement<'input>>,
     },
 }
 
@@ -73,7 +81,7 @@ pub enum Expression<'input> {
         identifier: &'input str,
     },
     FunctionExpression {
-        identifier: &'input str,
+        identifier: Option<&'input str>,
         parameters: Vec<VariableDefinition<'input>>,
         statements: Vec<Statement<'input>>,
     },

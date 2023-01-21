@@ -27,6 +27,8 @@ match {
     "&&",
     "||",
     "^^",
+    "{",
+    "}",
     "(",
     ")",
     "let",
@@ -63,37 +65,61 @@ pub Program: ast::Program<'input> =
         statements,
     };
 
-StatementList = (<Statement> ";")*;
+StatementList = <Statement*>;
+
+Body = "{" <StatementList> "}";
 
 Statement: ast::Statement<'input> = {
-    <expression:Expression> => ast::Statement::ExpressionStatement { expression },
-    ExportStatement,
+    <expression:Expression> ";" => ast::Statement::ExpressionStatement { expression },
     DefinitionStatement,
+    FunctionStatement,
+    ExportStatement,
+    BodyStatement,
 };
 
+BodyStatement: ast::Statement<'input> =
+    <statements:Body> => ast::Statement::BodyStatement {
+        statements
+    };
+
 ExportStatement: ast::Statement<'input> = {
-    "export" <expression:FunctionExpression> => ast::Statement::ExportStatement {
-        expression,
+    "export" <s:FunctionStatement> => ast::Statement::ExportStatement {
+        statement: Box::new(s),
+    },
+    "export" "const" <definition:VariableDefinition> "=" <e:Expression> ";" => ast::Statement::ExportStatement {
+        statement: Box::new(ast::Statement::DefinitionStatement {
+            is_const: true,
+            variable: definition,
+            expression: Some(e),
+        }),
+    },
+};
+
+FunctionStatement: ast::Statement<'input> = {
+    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" <statements:Body> => ast::Statement::FunctionStatement {
+        identifier,
+        parameters,
+        statements,
     },
 };
 
 DefinitionStatement: ast::Statement<'input> = {
-    "let" <definition:VariableDefinition> => ast::Statement::DefinitionStatement {
+    "let" <definition:VariableDefinition> ";" => ast::Statement::DefinitionStatement {
         is_const: false,
         variable: definition,
         expression: None,
     },
-    "let" <definition:VariableDefinition> "=" <e:Expression> => ast::Statement::DefinitionStatement {
+    "let" <definition:VariableDefinition> "=" <e:Expression> ";" => ast::Statement::DefinitionStatement {
         is_const: false,
         variable: definition,
         expression: Some(e),
     },
-    "const" <definition:VariableDefinition> => ast::Statement::DefinitionStatement {
+    "const" <definition:VariableDefinition> ";" => ast::Statement::DefinitionStatement {
         is_const: true,
         variable: definition,
         expression: None,
     },
-    "const" <definition:VariableDefinition> "=" <e:Expression> => ast::Statement::DefinitionStatement {
+    "const" <definition:VariableDefinition> "=" <e:Expression> ";" => ast::Statement::DefinitionStatement {
         is_const: true,
         variable: definition,
         expression: Some(e),
@@ -106,12 +132,18 @@ Expression: ast::Expression<'input> = {
     LogicalTerm,
 };
 
-FunctionExpression: ast::Expression<'input> =
-    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" <statements:StatementList> => ast::Expression::FunctionExpression {
-        identifier,
+FunctionExpression: ast::Expression<'input> = {
+    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" <statements:Body> => ast::Expression::FunctionExpression {
+        identifier: Some(identifier),
         parameters,
         statements,
-    };
+    },
+    "function" "(" <parameters:CommaList<VariableDefinition>> ")" <statements:Body> => ast::Expression::FunctionExpression {
+        identifier: None,
+        parameters,
+        statements,
+    },
+}
 
 AssignmentExpression: ast::Expression<'input> =
     <identifier:Identifier> "=" <e:Expression> => ast::Expression::AssignmentExpression {
