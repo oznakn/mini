@@ -114,7 +114,7 @@ ExportStatement: ast::Statement<'input> = {
 };
 
 FunctionStatement: ast::Statement<'input> = {
-    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" <statements:Body> => ast::Statement::FunctionStatement {
+    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinitionMustType>> ")" <statements:Body> => ast::Statement::FunctionStatement {
         identifier,
         parameters,
         statements,
@@ -151,12 +151,12 @@ Expression: ast::Expression<'input> = {
 };
 
 FunctionExpression: ast::Expression<'input> = {
-    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" <statements:Body> => ast::Expression::FunctionExpression {
+    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinitionMustType>> ")" <statements:Body> => ast::Expression::FunctionExpression {
         identifier: Some(identifier),
         parameters,
         statements,
     },
-    "function" "(" <parameters:CommaList<VariableDefinition>> ")" <statements:Body> => ast::Expression::FunctionExpression {
+    "function" "(" <parameters:CommaList<VariableDefinitionMustType>> ")" <statements:Body> => ast::Expression::FunctionExpression {
         identifier: None,
         parameters,
         statements,
@@ -238,15 +238,19 @@ LogicalOperator: ast::BinaryOperator = {
     "^^" => ast::BinaryOperator::Xor,
 };
 
-VariableDefinition: ast::VariableDefinition<'input> = {
+VariableDefinitionMustType: ast::VariableDefinition<'input> = {
     <identifier:Identifier> ":" <variable_type:VariableType> => ast::VariableDefinition {
         identifier,
         variable_type: Some(variable_type),
     },
+}
+
+VariableDefinition: ast::VariableDefinition<'input> = {
     <identifier:Identifier> => ast::VariableDefinition {
         identifier,
         variable_type: None,
     },
+    VariableDefinitionMustType,
 }
 
 VariableIdentifier: ast::VariableIdentifier<'input> = {

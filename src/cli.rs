@@ -1,40 +1,25 @@
 use clap::{App, Arg};
-use colored::Colorize;
-use std::fmt;
 use std::fs;
 
 use crate::error::CompilerError;
 use crate::mini;
+use crate::st;
 
-fn print_error(err: impl fmt::Display) {
-    for (index, line) in format!("{}", &err).lines().into_iter().enumerate() {
-        if index == 0 {
-            println!("{} {}", "error:".red(), line);
-        } else {
-            println!("{} {}", " ".repeat(6), line);
-        }
-    }
-}
+fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
+    let input_file = matches
+        .value_of("input")
+        .ok_or_else(|| "No input file provided".to_string())?;
 
-fn compile(matches: &clap::ArgMatches) -> Result<(), CompilerError> {
-    let maybe_input_file = matches.value_of("input");
-
-    if let None = maybe_input_file {
-        return Err(CompilerError::CliError(
-            "No input file provided".to_string(),
-        ));
-    }
-
-    let input_file = maybe_input_file.unwrap();
-
-    let content = fs::read_to_string(input_file)
-        .map_err(|_| CompilerError::CliError(format!("File not found: {}", input_file)))?;
+    let content =
+        fs::read_to_string(input_file).map_err(|_| format!("File not found: {}", input_file))?;
 
     let program = mini::ProgramParser::new()
         .parse(&content)
-        .map_err(|err| CompilerError::CliError(format!("{}", err)))?;
+        .map_err(|err| CompilerError::ParserError(err).to_string())?;
 
-    dbg!(&program);
+    let scope = st::Scope::from_program(&program).map_err(|err| err.to_string())?;
+
+    dbg!(&scope);
 
     Ok(())
 }
@@ -55,6 +40,6 @@ pub fn run() {
     let matches = app.get_matches();
 
     if let Err(err) = compile(&matches) {
-        print_error(err);
+        println!("{}", err);
     }
 }

@@ -1,13 +1,53 @@
+use colored::Colorize;
+use lalrpop_util::{lexer::Token, ParseError};
 use std::fmt;
 
-pub enum CompilerError {
-    CliError(String),
+#[derive(Debug, Clone)]
+pub enum CompilerError<'input> {
+    CliError(&'input str),
+    ParserError(ParseError<usize, Token<'input>, &'static str>),
+    VariableAlreadyDefined(&'input str),
+    VariableNotDefined(&'input str),
 }
 
-impl fmt::Display for CompilerError {
+impl<'input> fmt::Display for CompilerError<'input> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            CompilerError::CliError(err) => write!(f, "{}", err),
+            CompilerError::ParserError(err) => {
+                let mut lines = format!("{}", &err)
+                    .split_whitespace()
+                    .map(|s| s.to_string())
+                    .collect::<Vec<String>>();
+
+                for index in 0..lines.len() {
+                    if index == 0 {
+                        lines[index] = format!("{} {}", "error:".red(), lines[index]);
+                    } else {
+                        lines[index] = format!("{} {}", " ".repeat(6), lines[index]);
+                    }
+                }
+
+                let s = lines.join("\n");
+
+                writeln!(f, "{}", s)
+            }
+            CompilerError::CliError(err) => write!(f, "{}: {}", "error:".red(), err),
+            CompilerError::VariableAlreadyDefined(v) => {
+                write!(
+                    f,
+                    "{}: variable `{}` already defined",
+                    "error:".red(),
+                    v.yellow()
+                )
+            }
+            CompilerError::VariableNotDefined(v) => {
+                write!(
+                    f,
+                    "{}: variable `{}` not defined",
+                    "error:".red(),
+                    v.yellow()
+                )
+            }
         }
     }
 }
