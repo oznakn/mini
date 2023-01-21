@@ -12,6 +12,33 @@ pub enum VariableType {
 }
 
 #[derive(Clone, Debug)]
+pub enum UnaryOperator {
+    Positive,
+    Negative,
+    Not,
+}
+
+#[derive(Clone, Debug)]
+pub enum BinaryOperator {
+    Addition,
+    Subtraction,
+    Multiplication,
+    Division,
+    Mod,
+    Equal,
+    StrictEqual,
+    NotEqual,
+    StrictNotEqual,
+    Less,
+    LessEqual,
+    Greater,
+    GreaterEqual,
+    And,
+    Or,
+    Xor,
+}
+
+#[derive(Clone, Debug)]
 pub struct VariableIdentifier<'input> {
     pub name: &'input str,
 }
@@ -44,6 +71,15 @@ pub enum Expression<'input> {
     AssignmentExpression {
         identifier: VariableIdentifier<'input>,
         expression: Box<Expression<'input>>,
+    },
+    UnaryExpression {
+        operator: UnaryOperator,
+        expression: Box<Expression<'input>>,
+    },
+    BinaryExpression {
+        operator: BinaryOperator,
+        left: Box<Expression<'input>>,
+        right: Box<Expression<'input>>,
     },
     Empty,
 }

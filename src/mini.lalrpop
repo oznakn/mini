@@ -10,6 +10,25 @@ match {
     ";",
     ":",
     "=",
+    "+",
+    "-",
+    "!",
+    "*",
+    "/",
+    "%",
+    "==",
+    "===",
+    "!=",
+    "!==",
+    "<",
+    "<=",
+    ">",
+    ">=",
+    "&&",
+    "||",
+    "^^",
+    "(",
+    ")",
     "let",
     "const",
     "string",
@@ -17,7 +36,8 @@ match {
     r"[0-9]+",
     r"[0-9]+\.[0-9]+",
     r"[a-zA-Z][a-zA-Z0-9]*",
-    r"'[^\n\r]*'",
+    r"'[^\n\r']*'",
+    r"`[^\n\r`]*`",
 
     // Skip whitespace and comments
     r"\s*" => { },
@@ -33,18 +53,13 @@ CommaList<T>: Vec<T> = {
     }
 };
 
-SemiColonList<T>: Vec<T> = {
-    <items: (<T> ";")*> <last: T?> => {
-        let mut items = items;
-        items.extend(last);
-        items
-    }
-};
-
 pub Program: ast::Program<'input> =
-    <statement_list:SemiColonList<Statement>> => ast::Program {
+    <statement_list:StatementList> => ast::Program {
         statement_list,
     };
+
+StatementList =
+    (<Statement> ";")*;
 
 Statement: ast::Statement<'input> = {
     "let" <identifier:VariableIdentifier> ":" <variable_type:VariableType> => ast::Statement::DefinitionStatement { identifier, variable_type, is_const: false },
@@ -53,14 +68,76 @@ Statement: ast::Statement<'input> = {
 };
 
 Expression: ast::Expression<'input> = {
-    <value:Value> => ast::Expression::ValueExpression { value },
-    <identifier:VariableIdentifier> => ast::Expression::VariableExpression { identifier },
     <identifier:VariableIdentifier> "=" <expression:Expression> => ast::Expression::AssignmentExpression { identifier, expression: Box::new(expression) },
+    LogicalTerm,
 };
 
-VariableType: ast::VariableType = {
-    "string" => ast::VariableType::String,
-    "number" => ast::VariableType::Number,
+LogicalTerm: ast::Expression<'input> = {
+    <left:LogicalTerm> <operator:LogicalOperator> <right:AddTerm> => ast::Expression::BinaryExpression {
+        left: Box::new(left),
+        operator,
+        right: Box::new(right),
+    },
+    AddTerm,
+};
+
+AddTerm: ast::Expression<'input> = {
+    <left:AddTerm> <operator:AddOperator> <right:MulTerm> => ast::Expression::BinaryExpression {
+        left: Box::new(left),
+        operator,
+        right: Box::new(right),
+    },
+    MulTerm,
+};
+
+MulTerm: ast::Expression<'input> = {
+    <left:MulTerm> <operator:MulOperator> <right:Factor> => ast::Expression::BinaryExpression {
+        left: Box::new(left),
+        operator,
+        right: Box::new(right),
+    },
+    Factor,
+};
+
+Factor: ast::Expression<'input> = {
+    <operator:UnaryOperator> <e:Factor> => ast::Expression::UnaryExpression {
+        operator,
+        expression: Box::new(e),
+    },
+    <value:Value> => ast::Expression::ValueExpression { value },
+    <identifier:VariableIdentifier> => ast::Expression::VariableExpression { identifier },
+    "(" <e:Expression> ")" => e,
+};
+
+UnaryOperator: ast::UnaryOperator = {
+    "+" => ast::UnaryOperator::Positive,
+    "-" => ast::UnaryOperator::Negative,
+    "!" => ast::UnaryOperator::Not,
+};
+
+AddOperator: ast::BinaryOperator = {
+    "+" => ast::BinaryOperator::Addition,
+    "-" => ast::BinaryOperator::Subtraction,
+};
+
+MulOperator: ast::BinaryOperator = {
+    "*" => ast::BinaryOperator::Multiplication,
+    "/" => ast::BinaryOperator::Division,
+    "%" => ast::BinaryOperator::Mod,
+};
+
+LogicalOperator: ast::BinaryOperator = {
+    "==" => ast::BinaryOperator::Equal,
+    "===" => ast::BinaryOperator::StrictEqual,
+    "!=" => ast::BinaryOperator::NotEqual,
+    "!==" => ast::BinaryOperator::StrictNotEqual,
+    "<" => ast::BinaryOperator::Less,
+    "<=" => ast::BinaryOperator::LessEqual,
+    ">" => ast::BinaryOperator::Greater,
+    ">=" => ast::BinaryOperator::GreaterEqual,
+    "&&" => ast::BinaryOperator::And,
+    "||" => ast::BinaryOperator::Or,
+    "^^" => ast::BinaryOperator::Xor,
 };
 
 VariableIdentifier: ast::VariableIdentifier<'input> =
@@ -71,5 +148,11 @@ VariableIdentifier: ast::VariableIdentifier<'input> =
 Value: ast::Value<'input> = {
     <value:r"[0-9]+"> => ast::Value::Integer(u64::from_str(<>).unwrap()),
     <value:r"[0-9]+\.[0-9]+"> => ast::Value::Float(f64::from_str(<>).unwrap()),
-    <value:r"'[^\n\r]*'"> => ast::Value::String(&<>[1..<>.len()-1]),
-}
+    <value:r"'[^\n\r']*'"> => ast::Value::String(&<>[1..<>.len()-1]),
+    <value:r"`[^\n\r`]*`"> => ast::Value::String(&<>[1..<>.len()-1]),
+};
+
+VariableType: ast::VariableType = {
+    "string" => ast::VariableType::String,
+    "number" => ast::VariableType::Number,
+};
