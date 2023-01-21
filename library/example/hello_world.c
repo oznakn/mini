@@ -1,4 +1,4 @@
-#include "../headers/library.h"
+#include "./headers/library.h"
 
 int main(void) {
     hello_world();

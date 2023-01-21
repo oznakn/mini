@@ -2,10 +2,8 @@ build:
 	cargo build --all
 
 run: build
-	./target/debug/mini
+	./target/debug/mini example/simple.ts
 
-headers:
-	cbindgen --config cbindgen.toml --crate mini-library --output headers/library.h
-
-library_test:
-	gcc -L./target/debug -lmini_library -o test/example test/example.c && ./test/example
+library: build
+	cbindgen --config cbindgen.toml --crate mini-library --output library/example/headers/library.h
+	gcc -L./target/debug -lmini_library -o library/example/hello_world library/example/hello_world.c && ./library/example/hello_world

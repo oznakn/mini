@@ -1,7 +1,5 @@
 target/
 .DS_Store
 
-/headers
-
-test/*
-!test/*.c
+/library/example/*
+!/library/example/*.c
