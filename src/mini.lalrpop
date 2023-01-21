@@ -62,15 +62,59 @@ StatementList =
     (<Statement> ";")*;
 
 Statement: ast::Statement<'input> = {
-    "let" <identifier:VariableIdentifier> ":" <variable_type:VariableType> => ast::Statement::DefinitionStatement { identifier, variable_type, is_const: false },
-    "const" <identifier:VariableIdentifier> ":" <variable_type:VariableType> => ast::Statement::DefinitionStatement { identifier, variable_type, is_const: true },
     <expression:Expression> => ast::Statement::ExpressionStatement { expression },
+    DefinitionStatement,
 };
 
+DefinitionStatement: ast::Statement<'input> = {
+    "let" <identifier:VariableIdentifier> ":" <variable_type:VariableType> => ast::Statement::DefinitionStatement {
+        is_const: false,
+        identifier,
+        variable_type: Some(variable_type),
+        expression: None,
+    },
+    "const" <identifier:VariableIdentifier> ":" <variable_type:VariableType> => ast::Statement::DefinitionStatement {
+        is_const: true,
+        identifier,
+        variable_type: Some(variable_type),
+        expression: None,
+    },
+    "let" <identifier:VariableIdentifier> ":" <variable_type:VariableType> "=" <e:Expression> => ast::Statement::DefinitionStatement {
+        is_const: false,
+        identifier,
+        variable_type: Some(variable_type),
+        expression: Some(e),
+    },
+    "const" <identifier:VariableIdentifier> ":" <variable_type:VariableType> "=" <e:Expression> => ast::Statement::DefinitionStatement {
+        is_const: true,
+        identifier,
+        variable_type: Some(variable_type),
+        expression: Some(e),
+    },
+    "let" <identifier:VariableIdentifier> "=" <e:Expression> => ast::Statement::DefinitionStatement {
+        is_const: false,
+        identifier,
+        variable_type: None,
+        expression: Some(e),
+    },
+    "const" <identifier:VariableIdentifier> "=" <e:Expression> => ast::Statement::DefinitionStatement {
+        is_const: true,
+        identifier,
+        variable_type: None,
+        expression: Some(e),
+    },
+}
+
 Expression: ast::Expression<'input> = {
-    <identifier:VariableIdentifier> "=" <expression:Expression> => ast::Expression::AssignmentExpression { identifier, expression: Box::new(expression) },
+    AssignmentExpression,
     LogicalTerm,
 };
+
+AssignmentExpression: ast::Expression<'input> =
+    <identifier:VariableIdentifier> "=" <e:Expression> => ast::Expression::AssignmentExpression {
+        identifier,
+        expression: Box::new(e),
+    };
 
 LogicalTerm: ast::Expression<'input> = {
     <left:LogicalTerm> <operator:LogicalOperator> <right:AddTerm> => ast::Expression::BinaryExpression {

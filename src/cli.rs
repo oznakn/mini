@@ -16,7 +16,8 @@ fn print_error(err: impl fmt::Display) {
 }
 
 fn compile() -> Result<(), ParseError<usize, Token<'static>, &'static str>> {
-    let program = mini::ProgramParser::new().parse("1 ==  -1 * 1 == 1 + 1 * 1;")?;
+    let program =
+        mini::ProgramParser::new().parse("let a: number = 10; let b: string; a = 'aa'; b = 20;")?;
 
     dbg!(&program);
 

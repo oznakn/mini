@@ -54,9 +54,10 @@ pub enum Statement<'input> {
         expression: Expression<'input>,
     },
     DefinitionStatement {
-        identifier: VariableIdentifier<'input>,
-        variable_type: VariableType,
         is_const: bool,
+        identifier: VariableIdentifier<'input>,
+        variable_type: Option<VariableType>,
+        expression: Option<Expression<'input>>,
     },
 }
 
