@@ -1,14 +1,21 @@
 #[derive(Clone, Debug)]
+pub enum VariableKind {
+    String,
+    Number,
+    Function {
+        parameters: Vec<VariableKind>,
+        return_kind: Box<Option<VariableKind>>,
+    },
+    Array {
+        kind: Box<VariableKind>,
+    },
+}
+
+#[derive(Clone, Debug)]
 pub enum Value<'input> {
     Integer(u64),
     Float(f64),
     String(&'input str),
-}
-
-#[derive(Clone, Debug)]
-pub enum VariableType {
-    String,
-    Number,
 }
 
 #[derive(Clone, Debug)]
@@ -54,7 +61,7 @@ pub enum VariableIdentifier<'input> {
 #[derive(Clone, Debug)]
 pub struct VariableDefinition<'input> {
     pub identifier: &'input str,
-    pub variable_type: Option<VariableType>,
+    pub kind: Option<VariableKind>,
 }
 
 #[derive(Clone, Debug)]
@@ -77,6 +84,7 @@ pub enum Statement<'input> {
     },
     FunctionStatement {
         identifier: &'input str,
+        return_kind: Option<VariableKind>,
         parameters: Vec<VariableDefinition<'input>>,
         statements: Vec<Statement<'input>>,
     },
@@ -99,6 +107,7 @@ pub enum Expression<'input> {
     },
     FunctionExpression {
         identifier: Option<&'input str>,
+        return_kind: Option<VariableKind>,
         parameters: Vec<VariableDefinition<'input>>,
         statements: Vec<Statement<'input>>,
     },

@@ -1,18 +1,11 @@
-use std::collections::HashMap;
+use indexmap::IndexMap;
 
 use crate::ast;
 use crate::error::CompilerError;
 
 type ScopeId = usize;
 
-type VariableMap<'input> = HashMap<&'input str, VariableMapEntry<'input>>;
-
-#[derive(Clone, Debug)]
-pub enum VariableMapEntry<'input> {
-    Primitive,
-    Array { properties: VariableMap<'input> },
-    Object { properties: VariableMap<'input> },
-}
+type VariableMap<'input> = IndexMap<&'input str, ast::VariableKind>;
 
 #[derive(Clone, Debug)]
 pub struct Scope<'input> {
@@ -52,7 +45,7 @@ impl<'input> SymbolTable<'input> {
             id: scope,
             parent: None,
             scopes: Vec::new(),
-            variables: HashMap::new(),
+            variables: IndexMap::new(),
         });
 
         for statement in statements {
@@ -73,11 +66,15 @@ impl<'input> SymbolTable<'input> {
             id: scope,
             parent: None,
             scopes: Vec::new(),
-            variables: HashMap::new(),
+            variables: IndexMap::new(),
         });
 
         for parameter in parameters {
-            self.push_variable(scope, parameter.identifier)?;
+            self.push_variable(
+                scope,
+                parameter.identifier,
+                parameter.kind.as_ref().unwrap(),
+            )?;
         }
 
         for statement in statements {
@@ -103,6 +100,7 @@ impl<'input> SymbolTable<'input> {
         &mut self,
         scope: ScopeId,
         name: &'input str,
+        kind: &ast::VariableKind,
     ) -> Result<(), CompilerError<'input>> {
         let scope_obj = self.arena.get_mut(scope).unwrap();
 
@@ -110,9 +108,7 @@ impl<'input> SymbolTable<'input> {
             return Err(CompilerError::VariableAlreadyDefined(name));
         }
 
-        scope_obj
-            .variables
-            .insert(name, VariableMapEntry::Primitive);
+        scope_obj.variables.insert(name, kind.clone());
 
         Ok(())
     }
@@ -121,7 +117,7 @@ impl<'input> SymbolTable<'input> {
         &self,
         scope: ScopeId,
         name: &'input str,
-    ) -> Result<&VariableMapEntry, CompilerError<'input>> {
+    ) -> Result<&ast::VariableKind, CompilerError<'input>> {
         let scope_obj = self.arena.get(scope).unwrap();
 
         if scope_obj.variables.contains_key(name) {
@@ -139,46 +135,50 @@ impl<'input> SymbolTable<'input> {
         &mut self,
         scope: ScopeId,
         identifier: &'input ast::VariableIdentifier<'input>,
-    ) -> Result<&VariableMapEntry, CompilerError<'input>> {
+    ) -> Result<&ast::VariableKind, CompilerError<'input>> {
         match identifier {
             ast::VariableIdentifier::Identifier(s) => self.check_variable_exists(scope, s),
 
             ast::VariableIdentifier::Index { base, index } => {
-                self.check_expression(scope, index.as_ref())?;
+                self.build_expression(scope, index.as_ref())?;
 
                 let base = self.check_variable_identifier(scope, base.as_ref())?;
 
-                if let VariableMapEntry::Array { properties: _ } = base {
-                    // TODO: return type of array
-                    Ok(&VariableMapEntry::Primitive)
+                if let ast::VariableKind::Array { kind } = base {
+                    Ok(&kind)
                 } else {
                     return Err(CompilerError::CannotIndexOnType("".as_ref()));
                 }
             }
 
-            ast::VariableIdentifier::Property { base, property } => {
-                let base = self.check_variable_identifier(scope, base.as_ref())?;
+            ast::VariableIdentifier::Property { base, property: _ } => {
+                let _base = self.check_variable_identifier(scope, base.as_ref())?;
 
-                match base {
-                    VariableMapEntry::Object { properties } => {
-                        if properties.contains_key(property) {
-                            return Ok(properties.get(property).unwrap());
-                        }
-                    }
-                    VariableMapEntry::Array { properties } => {
-                        if properties.contains_key(property) {
-                            return Ok(properties.get(property).unwrap());
-                        }
-                    }
-                    _ => {}
-                }
+                // match base {
+                //     VariableMapEntry::Object { properties } => {
+                //         if properties.contains_key(property) {
+                //             return Ok(properties.get(property).unwrap());
+                //         }
+                //     }
+                //     VariableMapEntry::Array {
+                //         kind: _,
+                //         properties,
+                //     } => {
+                //         if properties.contains_key(property) {
+                //             return Ok(properties.get(property).unwrap());
+                //         }
+                //     }
+                //     _ => {}
+                // }
 
-                Err(CompilerError::PropertyNotExists(property))
+                // Err(CompilerError::PropertyNotExists(property))
+
+                unimplemented!()
             }
         }
     }
 
-    fn check_expression(
+    fn build_expression(
         &mut self,
         scope: ScopeId,
         expression: &'input ast::Expression<'input>,
@@ -190,7 +190,7 @@ impl<'input> SymbolTable<'input> {
             } => {
                 self.check_variable_identifier(scope, identifier)?;
 
-                self.check_expression(scope, expression)?;
+                self.build_expression(scope, expression)?;
             }
 
             ast::Expression::CallExpression {
@@ -198,17 +198,39 @@ impl<'input> SymbolTable<'input> {
                 arguments,
             } => {
                 for argument in arguments {
-                    self.check_expression(scope, argument)?;
+                    self.build_expression(scope, argument)?;
                 }
 
                 self.check_variable_identifier(scope, identifier)?;
+            }
+
+            ast::Expression::FunctionExpression {
+                identifier,
+                return_kind,
+                parameters,
+                statements,
+            } => {
+                let kind = ast::VariableKind::Function {
+                    parameters: parameters
+                        .iter()
+                        .map(|parameter| parameter.kind.as_ref().unwrap().clone())
+                        .collect(),
+                    return_kind: Box::new(return_kind.clone()),
+                };
+
+                let new_scope = self.new_function_scope(parameters, statements)?;
+                if let Some(identifier) = identifier {
+                    self.push_variable(new_scope, identifier, &kind)?;
+                }
+
+                self.push_scope(scope, new_scope)?;
             }
 
             ast::Expression::UnaryExpression {
                 operator: _,
                 expression,
             } => {
-                self.check_expression(scope, expression)?;
+                self.build_expression(scope, expression)?;
             }
 
             ast::Expression::VariableExpression { identifier } => {
@@ -228,27 +250,26 @@ impl<'input> SymbolTable<'input> {
     ) -> Result<(), CompilerError<'input>> {
         match statement {
             ast::Statement::ExpressionStatement { expression } => {
-                self.check_expression(scope, expression)?;
+                self.build_expression(scope, expression)?;
             }
 
             ast::Statement::FunctionStatement {
                 identifier,
+                return_kind,
                 parameters,
                 statements,
             } => {
-                self.push_variable(scope, identifier)?;
+                let kind = ast::VariableKind::Function {
+                    parameters: parameters
+                        .iter()
+                        .map(|parameter| parameter.kind.as_ref().unwrap().clone())
+                        .collect(),
+                    return_kind: Box::new(return_kind.clone()),
+                };
+                self.push_variable(scope, identifier, &kind)?;
 
                 let new_scope = self.new_function_scope(parameters, statements)?;
                 self.push_scope(scope, new_scope)?;
-            }
-
-            ast::Statement::ImportStatement {
-                from: _,
-                identifier,
-            } => {
-                if let Some(identifier) = identifier {
-                    self.push_variable(scope, identifier)?;
-                }
             }
 
             ast::Statement::DefinitionStatement {
@@ -256,7 +277,8 @@ impl<'input> SymbolTable<'input> {
                 expression: _,
                 variable,
             } => {
-                self.push_variable(scope, variable.identifier)?;
+                // TODO: do not unwrap the value
+                self.push_variable(scope, variable.identifier, variable.kind.as_ref().unwrap())?;
             }
 
             ast::Statement::BodyStatement { statements } => {

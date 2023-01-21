@@ -116,7 +116,7 @@ ExportStatement: ast::Statement<'input> = {
     "export" <s:FunctionStatement> => ast::Statement::ExportStatement {
         statement: Box::new(s),
     },
-    "export" "const" <definition:VariableDefinition> "=" <e:Expression> ";" => ast::Statement::ExportStatement {
+    "export" "const" <definition:VariableDefinitionOptionalKind> "=" <e:Expression> ";" => ast::Statement::ExportStatement {
         statement: Box::new(ast::Statement::DefinitionStatement {
             is_const: true,
             variable: definition,
@@ -126,30 +126,31 @@ ExportStatement: ast::Statement<'input> = {
 };
 
 FunctionStatement: ast::Statement<'input> = {
-    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinitionMustType>> ")" <statements:Body> => ast::Statement::FunctionStatement {
+    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" ":" <return_kind:VariableKind> <statements:Body> => ast::Statement::FunctionStatement {
         identifier,
+        return_kind: Some(return_kind),
         parameters,
         statements,
     },
 };
 
 DefinitionStatement: ast::Statement<'input> = {
-    "let" <definition:VariableDefinition> ";" => ast::Statement::DefinitionStatement {
+    "let" <definition:VariableDefinitionOptionalKind> ";" => ast::Statement::DefinitionStatement {
         is_const: false,
         variable: definition,
         expression: None,
     },
-    "let" <definition:VariableDefinition> "=" <e:Expression> ";" => ast::Statement::DefinitionStatement {
+    "let" <definition:VariableDefinitionOptionalKind> "=" <e:Expression> ";" => ast::Statement::DefinitionStatement {
         is_const: false,
         variable: definition,
         expression: Some(e),
     },
-    "const" <definition:VariableDefinition> ";" => ast::Statement::DefinitionStatement {
+    "const" <definition:VariableDefinitionOptionalKind> ";" => ast::Statement::DefinitionStatement {
         is_const: true,
         variable: definition,
         expression: None,
     },
-    "const" <definition:VariableDefinition> "=" <e:Expression> ";" => ast::Statement::DefinitionStatement {
+    "const" <definition:VariableDefinitionOptionalKind> "=" <e:Expression> ";" => ast::Statement::DefinitionStatement {
         is_const: true,
         variable: definition,
         expression: Some(e),
@@ -163,13 +164,15 @@ Expression: ast::Expression<'input> = {
 };
 
 FunctionExpression: ast::Expression<'input> = {
-    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinitionMustType>> ")" <statements:Body> => ast::Expression::FunctionExpression {
+    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" ":" <return_kind:VariableKind> <statements:Body> => ast::Expression::FunctionExpression {
         identifier: Some(identifier),
+        return_kind: Some(return_kind),
         parameters,
         statements,
     },
-    "function" "(" <parameters:CommaList<VariableDefinitionMustType>> ")" <statements:Body> => ast::Expression::FunctionExpression {
+    "function" "(" <parameters:CommaList<VariableDefinition>> ")" ":" <return_kind:VariableKind> <statements:Body> => ast::Expression::FunctionExpression {
         identifier: None,
+        return_kind: Some(return_kind),
         parameters,
         statements,
     },
@@ -250,19 +253,19 @@ LogicalOperator: ast::BinaryOperator = {
     "^^" => ast::BinaryOperator::Xor,
 };
 
-VariableDefinitionMustType: ast::VariableDefinition<'input> = {
-    <identifier:Identifier> ":" <variable_type:VariableType> => ast::VariableDefinition {
+VariableDefinition: ast::VariableDefinition<'input> = {
+    <identifier:Identifier> ":" <kind:VariableKind> => ast::VariableDefinition {
         identifier,
-        variable_type: Some(variable_type),
+        kind: Some(kind),
     },
 }
 
-VariableDefinition: ast::VariableDefinition<'input> = {
+VariableDefinitionOptionalKind: ast::VariableDefinition<'input> = {
+    VariableDefinition,
     <identifier:Identifier> => ast::VariableDefinition {
         identifier,
-        variable_type: None,
+        kind: None,
     },
-    VariableDefinitionMustType,
 }
 
 VariableIdentifier: ast::VariableIdentifier<'input> = {
@@ -292,7 +295,7 @@ Value: ast::Value<'input> = {
     String,
 };
 
-VariableType: ast::VariableType = {
-    "string" => ast::VariableType::String,
-    "number" => ast::VariableType::Number,
+VariableKind: ast::VariableKind = {
+    "string" => ast::VariableKind::String,
+    "number" => ast::VariableKind::Number,
 };
