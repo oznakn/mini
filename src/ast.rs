@@ -39,13 +39,14 @@ pub enum BinaryOperator {
 }
 
 #[derive(Clone, Debug)]
-pub struct VariableIdentifier<'input> {
-    pub name: &'input str,
+pub struct VariableDefinition<'input> {
+    pub identifier: &'input str,
+    pub variable_type: Option<VariableType>,
 }
 
 #[derive(Clone, Debug)]
 pub struct Program<'input> {
-    pub statement_list: Vec<Statement<'input>>,
+    pub statements: Vec<Statement<'input>>,
 }
 
 #[derive(Clone, Debug)]
@@ -55,9 +56,11 @@ pub enum Statement<'input> {
     },
     DefinitionStatement {
         is_const: bool,
-        identifier: VariableIdentifier<'input>,
-        variable_type: Option<VariableType>,
+        variable: VariableDefinition<'input>,
         expression: Option<Expression<'input>>,
+    },
+    ExportStatement {
+        expression: Expression<'input>,
     },
 }
 
@@ -67,10 +70,15 @@ pub enum Expression<'input> {
         value: Value<'input>,
     },
     VariableExpression {
-        identifier: VariableIdentifier<'input>,
+        identifier: &'input str,
+    },
+    FunctionExpression {
+        identifier: &'input str,
+        parameters: Vec<VariableDefinition<'input>>,
+        statements: Vec<Statement<'input>>,
     },
     AssignmentExpression {
-        identifier: VariableIdentifier<'input>,
+        identifier: &'input str,
         expression: Box<Expression<'input>>,
     },
     UnaryExpression {

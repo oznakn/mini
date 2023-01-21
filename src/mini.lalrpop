@@ -33,6 +33,11 @@ match {
     "const",
     "string",
     "number",
+
+    "function",
+    "export",
+    "import",
+
     r"[0-9]+",
     r"[0-9]+\.[0-9]+",
     r"[a-zA-Z][a-zA-Z0-9]*",
@@ -54,64 +59,62 @@ CommaList<T>: Vec<T> = {
 };
 
 pub Program: ast::Program<'input> =
-    <statement_list:StatementList> => ast::Program {
-        statement_list,
+    <statements:StatementList> => ast::Program {
+        statements,
     };
 
-StatementList =
-    (<Statement> ";")*;
+StatementList = (<Statement> ";")*;
 
 Statement: ast::Statement<'input> = {
     <expression:Expression> => ast::Statement::ExpressionStatement { expression },
+    ExportStatement,
     DefinitionStatement,
 };
 
+ExportStatement: ast::Statement<'input> = {
+    "export" <expression:FunctionExpression> => ast::Statement::ExportStatement {
+        expression,
+    },
+};
+
 DefinitionStatement: ast::Statement<'input> = {
-    "let" <identifier:VariableIdentifier> ":" <variable_type:VariableType> => ast::Statement::DefinitionStatement {
+    "let" <definition:VariableDefinition> => ast::Statement::DefinitionStatement {
         is_const: false,
-        identifier,
-        variable_type: Some(variable_type),
+        variable: definition,
         expression: None,
     },
-    "const" <identifier:VariableIdentifier> ":" <variable_type:VariableType> => ast::Statement::DefinitionStatement {
+    "let" <definition:VariableDefinition> "=" <e:Expression> => ast::Statement::DefinitionStatement {
+        is_const: false,
+        variable: definition,
+        expression: Some(e),
+    },
+    "const" <definition:VariableDefinition> => ast::Statement::DefinitionStatement {
         is_const: true,
-        identifier,
-        variable_type: Some(variable_type),
+        variable: definition,
         expression: None,
     },
-    "let" <identifier:VariableIdentifier> ":" <variable_type:VariableType> "=" <e:Expression> => ast::Statement::DefinitionStatement {
-        is_const: false,
-        identifier,
-        variable_type: Some(variable_type),
-        expression: Some(e),
-    },
-    "const" <identifier:VariableIdentifier> ":" <variable_type:VariableType> "=" <e:Expression> => ast::Statement::DefinitionStatement {
+    "const" <definition:VariableDefinition> "=" <e:Expression> => ast::Statement::DefinitionStatement {
         is_const: true,
-        identifier,
-        variable_type: Some(variable_type),
-        expression: Some(e),
-    },
-    "let" <identifier:VariableIdentifier> "=" <e:Expression> => ast::Statement::DefinitionStatement {
-        is_const: false,
-        identifier,
-        variable_type: None,
-        expression: Some(e),
-    },
-    "const" <identifier:VariableIdentifier> "=" <e:Expression> => ast::Statement::DefinitionStatement {
-        is_const: true,
-        identifier,
-        variable_type: None,
+        variable: definition,
         expression: Some(e),
     },
 }
 
 Expression: ast::Expression<'input> = {
     AssignmentExpression,
+    FunctionExpression,
     LogicalTerm,
 };
 
+FunctionExpression: ast::Expression<'input> =
+    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" <statements:StatementList> => ast::Expression::FunctionExpression {
+        identifier,
+        parameters,
+        statements,
+    };
+
 AssignmentExpression: ast::Expression<'input> =
-    <identifier:VariableIdentifier> "=" <e:Expression> => ast::Expression::AssignmentExpression {
+    <identifier:Identifier> "=" <e:Expression> => ast::Expression::AssignmentExpression {
         identifier,
         expression: Box::new(e),
     };
@@ -149,7 +152,7 @@ Factor: ast::Expression<'input> = {
         expression: Box::new(e),
     },
     <value:Value> => ast::Expression::ValueExpression { value },
-    <identifier:VariableIdentifier> => ast::Expression::VariableExpression { identifier },
+    <identifier:Identifier> => ast::Expression::VariableExpression { identifier },
     "(" <e:Expression> ")" => e,
 };
 
@@ -184,10 +187,19 @@ LogicalOperator: ast::BinaryOperator = {
     "^^" => ast::BinaryOperator::Xor,
 };
 
-VariableIdentifier: ast::VariableIdentifier<'input> =
-    <name:r"[a-zA-Z][a-zA-Z0-9]*"> => ast::VariableIdentifier {
-        name,
-    };
+VariableDefinition: ast::VariableDefinition<'input> = {
+    <identifier:Identifier> ":" <variable_type:VariableType> => ast::VariableDefinition {
+        identifier,
+        variable_type: Some(variable_type),
+    },
+    <identifier:Identifier> => ast::VariableDefinition {
+        identifier,
+        variable_type: None,
+    },
+}
+
+Identifier: &'input str =
+    <name:r"[a-zA-Z][a-zA-Z0-9]*"> => name;
 
 Value: ast::Value<'input> = {
     <value:r"[0-9]+"> => ast::Value::Integer(u64::from_str(<>).unwrap()),
