@@ -92,8 +92,8 @@ impl<'input> fmt::Display for CompilerError<'input> {
                     f,
                     "{}: expected argument of type `{}`, but got `{}`",
                     "error:".red(),
-                    format!("{:?}", expected).yellow(),
-                    format!("{:?}", got).yellow(),
+                    expected.get_name().yellow(),
+                    got.get_name().yellow(),
                 )
             }
         }

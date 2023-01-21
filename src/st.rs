@@ -223,9 +223,10 @@ impl<'input> SymbolTable<'input> {
                 left,
                 right,
             } => {
-                self.get_expression_kind(scope, right)?;
+                let left_kind = self.get_expression_kind(scope, left)?;
+                let right_kind = self.get_expression_kind(scope, right)?;
 
-                self.get_expression_kind(scope, left)
+                Ok(left_kind.operation_result(&right_kind))
             }
 
             ast::Expression::UnaryExpression {

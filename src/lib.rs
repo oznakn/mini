@@ -4,5 +4,6 @@ pub mod ast;
 pub mod cli;
 pub mod error;
 pub mod st;
+pub mod value;
 
 lalrpop_mod!(pub mini);
