@@ -47,7 +47,7 @@ impl<'input> SymbolTable<'input> {
         });
 
         for statement in statements {
-            self.construct_from_statement(scope, statement)?;
+            self.build(scope, statement)?;
         }
 
         Ok(scope)
@@ -72,7 +72,7 @@ impl<'input> SymbolTable<'input> {
         }
 
         for statement in statements {
-            self.construct_from_statement(scope, statement)?;
+            self.build(scope, statement)?;
         }
 
         Ok(scope)
@@ -106,12 +106,89 @@ impl<'input> SymbolTable<'input> {
         Ok(())
     }
 
-    fn construct_from_statement(
+    fn check_variable_exists(
+        &self,
+        scope: ScopeId,
+        name: &'input str,
+    ) -> Result<(), CompilerError<'input>> {
+        let scope_obj = self.arena.get(scope).unwrap();
+
+        if scope_obj.variables.contains(name) {
+            return Ok(());
+        }
+
+        if let Some(parent) = scope_obj.parent {
+            return self.check_variable_exists(parent, name);
+        }
+
+        Err(CompilerError::VariableNotDefined(name))
+    }
+
+    fn check_variable_identifier(
+        &mut self,
+        scope: ScopeId,
+        identifier: &'input ast::VariableIdentifier<'input>,
+    ) -> Result<(), CompilerError<'input>> {
+        match identifier {
+            ast::VariableIdentifier::Identifier(s) => self.check_variable_exists(scope, s),
+            ast::VariableIdentifier::Index { base, index: _ } => {
+                self.check_variable_identifier(scope, base.as_ref())
+            }
+            ast::VariableIdentifier::Property { base, property: _ } => {
+                self.check_variable_identifier(scope, base.as_ref())
+            }
+        }
+    }
+
+    fn check_expression(
+        &mut self,
+        scope: ScopeId,
+        expression: &'input ast::Expression<'input>,
+    ) -> Result<(), CompilerError<'input>> {
+        match expression {
+            ast::Expression::AssignmentExpression {
+                identifier,
+                expression,
+            } => {
+                self.check_variable_identifier(scope, identifier)?;
+
+                self.check_expression(scope, expression)
+            }
+
+            ast::Expression::CallExpression {
+                identifier,
+                arguments,
+            } => {
+                for argument in arguments {
+                    self.check_expression(scope, argument)?;
+                }
+
+                self.check_variable_identifier(scope, identifier)
+            }
+
+            ast::Expression::UnaryExpression {
+                operator: _,
+                expression,
+            } => self.check_expression(scope, expression),
+
+            ast::Expression::VariableExpression { identifier } => {
+                self.check_variable_identifier(scope, identifier)
+            }
+
+            _ => Ok(()),
+        }
+    }
+
+    fn build(
         &mut self,
         scope: ScopeId,
         statement: &'input ast::Statement<'input>,
     ) -> Result<(), CompilerError<'input>> {
         match statement {
+            ast::Statement::ExpressionStatement { expression } => {
+                self.check_expression(scope, expression)?;
+            }
+
             ast::Statement::FunctionStatement {
                 identifier,
                 parameters,
