@@ -2,6 +2,16 @@
 name = "mini"
 version = "0.1.0"
 edition = "2021"
+build = "build.rs"
+
+[dependencies]
+clap = "4.1.1"
+lalrpop-util = "0.19.8"
+logos = "0.12.1"
+regex = "1"
+
+[build-dependencies]
+lalrpop = "0.19.8"
 
 [workspace]
 members = ["library"]
