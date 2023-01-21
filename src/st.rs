@@ -3,89 +3,112 @@ use std::collections::HashSet;
 use crate::ast;
 use crate::error::CompilerError;
 
+type ScopeId = usize;
+
 #[derive(Clone, Debug)]
-pub struct SymbolTable<'input> {
-    pub scopes: Vec<Scope<'input>>,
+pub struct Scope<'input> {
+    pub id: ScopeId,
+    pub parent: Option<ScopeId>,
+    pub scopes: Vec<ScopeId>,
     pub variables: HashSet<&'input str>,
 }
 
 #[derive(Clone, Debug)]
-pub struct Scope<'input> {
-    pub symbol_table: Box<SymbolTable<'input>>,
+pub struct SymbolTable<'input> {
+    pub global: Option<ScopeId>,
+    pub arena: Vec<Scope<'input>>,
 }
 
 impl<'input> SymbolTable<'input> {
-    pub fn new() -> SymbolTable<'input> {
-        SymbolTable {
-            scopes: Vec::new(),
-            variables: HashSet::new(),
-        }
-    }
-}
+    pub fn from_program(
+        program: &'input ast::Program<'input>,
+    ) -> Result<SymbolTable<'input>, CompilerError<'input>> {
+        let mut st = SymbolTable {
+            global: None,
+            arena: Vec::new(),
+        };
 
-impl<'input> Scope<'input> {
-    fn new() -> Scope<'input> {
-        Scope {
-            symbol_table: Box::new(SymbolTable::new()),
-        }
+        st.global = Some(st.new_scope(&program.statements)?);
+
+        Ok(st)
     }
 
     fn new_scope(
+        &mut self,
         statements: &'input Vec<ast::Statement<'input>>,
-    ) -> Result<Scope<'input>, CompilerError<'input>> {
-        let mut scope = Scope::new();
+    ) -> Result<ScopeId, CompilerError<'input>> {
+        let scope = self.arena.len();
+
+        self.arena.push(Scope {
+            id: scope,
+            parent: None,
+            scopes: Vec::new(),
+            variables: HashSet::new(),
+        });
 
         for statement in statements {
-            scope.construct_from_statement(statement)?;
+            self.construct_from_statement(scope, statement)?;
         }
 
         Ok(scope)
     }
 
     fn new_function_scope(
+        &mut self,
         parameters: &'input Vec<ast::VariableDefinition>,
         statements: &'input Vec<ast::Statement<'input>>,
-    ) -> Result<Scope<'input>, CompilerError<'input>> {
-        let mut scope = Scope::new();
+    ) -> Result<ScopeId, CompilerError<'input>> {
+        let scope = self.arena.len();
+
+        self.arena.push(Scope {
+            id: scope,
+            parent: None,
+            scopes: Vec::new(),
+            variables: HashSet::new(),
+        });
 
         for parameter in parameters {
-            scope.push_variable(parameter.identifier)?;
+            self.push_variable(scope, parameter.identifier)?;
         }
 
         for statement in statements {
-            scope.construct_from_statement(statement)?;
+            self.construct_from_statement(scope, statement)?;
         }
 
         Ok(scope)
     }
 
-    pub fn from_program(
-        program: &'input ast::Program<'input>,
-    ) -> Result<Scope<'input>, CompilerError<'input>> {
-        Scope::new_scope(&program.statements)
-    }
+    fn push_scope(
+        &mut self,
+        scope: ScopeId,
+        new_scope: ScopeId,
+    ) -> Result<(), CompilerError<'input>> {
+        self.arena.get_mut(new_scope).unwrap().parent = Some(scope);
 
-    fn push_scope(&mut self, scope: Scope<'input>) -> Result<(), CompilerError<'input>> {
-        let symbol_table = self.symbol_table.as_mut();
-        symbol_table.scopes.push(scope);
+        self.arena.get_mut(scope).unwrap().scopes.push(new_scope);
 
         Ok(())
     }
 
-    fn push_variable(&mut self, name: &'input str) -> Result<(), CompilerError<'input>> {
-        let symbol_table = self.symbol_table.as_mut();
+    fn push_variable(
+        &mut self,
+        scope: ScopeId,
+        name: &'input str,
+    ) -> Result<(), CompilerError<'input>> {
+        let scope_obj = self.arena.get_mut(scope).unwrap();
 
-        if symbol_table.variables.contains(name) {
+        if scope_obj.variables.contains(name) {
             return Err(CompilerError::VariableAlreadyDefined(name));
         }
 
-        symbol_table.variables.insert(name);
+        scope_obj.variables.insert(name);
 
         Ok(())
     }
 
     fn construct_from_statement(
         &mut self,
+        scope: ScopeId,
         statement: &'input ast::Statement<'input>,
     ) -> Result<(), CompilerError<'input>> {
         match statement {
@@ -94,16 +117,17 @@ impl<'input> Scope<'input> {
                 parameters,
                 statements,
             } => {
-                self.push_variable(identifier)?;
+                self.push_variable(scope, identifier)?;
 
-                self.push_scope(Scope::new_function_scope(parameters, statements)?)?;
+                let new_scope = self.new_function_scope(parameters, statements)?;
+                self.push_scope(scope, new_scope)?;
             }
 
             ast::Statement::ImportStatement {
                 from: _,
                 identifier,
             } => {
-                self.push_variable(identifier)?;
+                self.push_variable(scope, identifier)?;
             }
 
             ast::Statement::DefinitionStatement {
@@ -111,11 +135,13 @@ impl<'input> Scope<'input> {
                 expression: _,
                 variable,
             } => {
-                self.push_variable(variable.identifier)?;
+                self.push_variable(scope, variable.identifier)?;
             }
 
             ast::Statement::BodyStatement { statements } => {
-                self.push_scope(Scope::new_scope(statements)?)?;
+                let new_scope = self.new_scope(statements)?;
+
+                self.push_scope(scope, new_scope)?;
             }
 
             _ => {}

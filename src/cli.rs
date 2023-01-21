@@ -17,7 +17,7 @@ fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
         .parse(&content)
         .map_err(|err| CompilerError::ParserError(err).to_string())?;
 
-    let scope = st::Scope::from_program(&program).map_err(|err| err.to_string())?;
+    let scope = st::SymbolTable::from_program(&program).map_err(|err| err.to_string())?;
 
     dbg!(&scope);
 
