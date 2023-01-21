@@ -74,12 +74,13 @@ pub Program: ast::Program<'input> =
         statements,
     };
 
-StatementList = (<Statement> ";"?)*;
+StatementList = Statement*;
 
 Body = "{" <StatementList> "}";
 
 Statement: ast::Statement<'input> = {
     <expression:Expression> ";" => ast::Statement::ExpressionStatement { expression },
+    ";" => ast::Statement::EmptyStatement,
     DefinitionStatement,
     FunctionStatement,
     ImportStatement,
@@ -153,7 +154,7 @@ FunctionStatement: ast::Statement<'input> = {
 };
 
 DefinitionStatement: ast::Statement<'input> = {
-    "let" <definition:VariableDefinition> ";" => ast::Statement::DefinitionStatement {
+    "let" <definition:VariableDefinitionOptionalKind> ";" => ast::Statement::DefinitionStatement {
         is_const: false,
         variable: definition,
         expression: None,
@@ -163,7 +164,7 @@ DefinitionStatement: ast::Statement<'input> = {
         variable: definition,
         expression: Some(e),
     },
-    "const" <definition:VariableDefinition> ";" => ast::Statement::DefinitionStatement {
+    "const" <definition:VariableDefinitionOptionalKind> ";" => ast::Statement::DefinitionStatement {
         is_const: true,
         variable: definition,
         expression: None,
@@ -176,8 +177,15 @@ DefinitionStatement: ast::Statement<'input> = {
 }
 
 Expression: ast::Expression<'input> = {
+    AssignmentExpression,
     LogicalTerm,
 };
+
+AssignmentExpression: ast::Expression<'input> =
+    <identifier:VariableIdentifier> "=" <e:Expression> => ast::Expression::AssignmentExpression {
+        identifier,
+        expression: Box::new(e),
+    };
 
 LogicalTerm: ast::Expression<'input> = {
     <left:LogicalTerm> <operator:LogicalOperator> <right:AddTerm> => ast::Expression::BinaryExpression {

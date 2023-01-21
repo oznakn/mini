@@ -12,8 +12,6 @@ pub struct Scope<'input> {
     pub id: ScopeId,
     pub parent: Option<ScopeId>,
 
-    pub statements: &'input Vec<ast::Statement<'input>>,
-
     pub scopes: Vec<ScopeId>,
     pub variables: VariableMap<'input>,
 }
@@ -47,7 +45,6 @@ impl<'input> SymbolTable<'input> {
         self.arena.push(Scope {
             id: scope,
             parent: None,
-            statements,
             scopes: Vec::new(),
             variables: IndexMap::new(),
         });
@@ -95,11 +92,19 @@ impl<'input> SymbolTable<'input> {
             match statement {
                 ast::Statement::FunctionStatement {
                     identifier,
-                    return_kind: _,
+                    return_kind,
                     parameters,
                     statements,
                 } => {
-                    self.add_variable(scope, identifier, &ast::VariableKind::Undefined)?;
+                    let kind = ast::VariableKind::Function {
+                        parameters: parameters
+                            .iter()
+                            .map(|parameter| parameter.kind.as_ref().unwrap().clone())
+                            .collect(),
+                        return_kind: Box::new(return_kind.clone()),
+                    };
+
+                    self.add_variable(scope, identifier, &kind)?;
 
                     let new_scope = self.new_scope(statements)?;
 
@@ -121,16 +126,12 @@ impl<'input> SymbolTable<'input> {
                 } => {
                     if let Some(kind) = &variable.kind {
                         self.add_variable(scope, variable.identifier, kind)?;
-                    } else if expression.is_some() {
-                        self.add_variable(
-                            scope,
-                            variable.identifier,
-                            &ast::VariableKind::Undefined,
-                        )?;
+                    } else if let Some(expression) = expression {
+                        let kind = self.get_expression_kind(scope, expression)?;
+
+                        self.add_variable(scope, variable.identifier, &kind)?;
                     } else {
-                        unreachable!(
-                            "Definition statement must have either a kind or an expression"
-                        )
+                        unimplemented!()
                     }
                 }
 

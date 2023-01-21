@@ -1,4 +1,4 @@
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Eq, PartialEq)]
 pub enum VariableKind {
     Undefined,
     Null,
@@ -111,6 +111,7 @@ pub enum Statement<'input> {
     ExportStatement {
         statement: Box<Statement<'input>>,
     },
+    EmptyStatement,
 }
 
 #[derive(Clone, Debug)]
@@ -128,6 +129,10 @@ pub enum Expression<'input> {
     CommaExpression {
         expressions: Vec<Expression<'input>>,
     },
+    AssignmentExpression {
+        identifier: VariableIdentifier<'input>,
+        expression: Box<Expression<'input>>,
+    },
     UnaryExpression {
         operator: UnaryOperator,
         expression: Box<Expression<'input>>,
@@ -137,5 +142,4 @@ pub enum Expression<'input> {
         left: Box<Expression<'input>>,
         right: Box<Expression<'input>>,
     },
-    Empty,
 }

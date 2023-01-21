@@ -3,7 +3,7 @@ use crate::error::CompilerError;
 use crate::st::*;
 
 impl<'input> SymbolTable<'input> {
-    fn check_variable(
+    pub fn get_variable_kind(
         &self,
         scope: ScopeId,
         name: &'input str,
@@ -15,25 +15,25 @@ impl<'input> SymbolTable<'input> {
         }
 
         if let Some(parent) = scope_obj.parent {
-            return self.check_variable(parent, name);
+            return self.get_variable_kind(parent, name);
         }
 
         Err(CompilerError::VariableNotDefined(name))
     }
 
-    fn check_variable_identifier(
+    pub fn get_variable_identifier_kind(
         &self,
         scope: ScopeId,
         identifier: &'input ast::VariableIdentifier<'input>,
     ) -> Result<&ast::VariableKind, CompilerError<'input>> {
         match identifier {
-            ast::VariableIdentifier::Identifier(s) => self.check_variable(scope, s),
+            ast::VariableIdentifier::Identifier(s) => self.get_variable_kind(scope, s),
             _ => unimplemented!(),
         }
     }
 
-    fn check_expression(
-        &mut self,
+    pub fn get_expression_kind(
+        &self,
         scope: ScopeId,
         expression: &'input ast::Expression<'input>,
     ) -> Result<ast::VariableKind, CompilerError<'input>> {
@@ -41,7 +41,7 @@ impl<'input> SymbolTable<'input> {
             ast::Expression::ValueExpression { value } => Ok(value.get_kind()),
 
             ast::Expression::VariableExpression { identifier } => self
-                .check_variable_identifier(scope, identifier)
+                .get_variable_identifier_kind(scope, identifier)
                 .map(|v| v.clone()),
 
             ast::Expression::CommaExpression { expressions } => {
@@ -50,36 +50,41 @@ impl<'input> SymbolTable<'input> {
                 }
 
                 for expression in expressions.iter().skip(1) {
-                    self.check_expression(scope, expression)?;
+                    self.get_expression_kind(scope, expression)?;
                 }
 
-                self.check_expression(scope, expressions.get(0).unwrap())
+                self.get_expression_kind(scope, expressions.get(0).unwrap())
             }
+
+            ast::Expression::AssignmentExpression {
+                identifier: _,
+                expression,
+            } => self.get_expression_kind(scope, expression),
 
             ast::Expression::BinaryExpression {
                 operator: _,
                 left,
                 right,
             } => {
-                self.check_expression(scope, right)?;
+                self.get_expression_kind(scope, right)?;
 
-                self.check_expression(scope, left)
+                self.get_expression_kind(scope, left)
             }
 
             ast::Expression::UnaryExpression {
                 operator: _,
                 expression,
-            } => self.check_expression(scope, &expression),
+            } => self.get_expression_kind(scope, &expression),
 
             ast::Expression::CallExpression {
                 identifier,
                 arguments,
             } => {
                 for argument in arguments {
-                    self.check_expression(scope, argument)?;
+                    self.get_expression_kind(scope, argument)?;
                 }
 
-                let called_function = self.check_variable_identifier(scope, identifier)?;
+                let called_function = self.get_variable_identifier_kind(scope, identifier)?;
                 match called_function {
                     ast::VariableKind::Function {
                         parameters,
@@ -101,44 +106,6 @@ impl<'input> SymbolTable<'input> {
                     _ => return Err(CompilerError::InvalidFunctionCall),
                 }
             }
-
-            ast::Expression::Empty => Ok(ast::VariableKind::Undefined),
         }
-    }
-
-    fn check_statement(
-        &mut self,
-        scope: ScopeId,
-        statement: &'input ast::Statement<'input>,
-    ) -> Result<(), CompilerError<'input>> {
-        match statement {
-            ast::Statement::ExpressionStatement { expression } => {
-                self.check_expression(scope, expression)?;
-            }
-
-            _ => {}
-        }
-
-        Ok(())
-    }
-
-    fn check_scope(&mut self, scope: ScopeId) -> Result<(), CompilerError<'input>> {
-        let scope_obj = self.arena.get_mut(scope).unwrap();
-
-        for statement in scope_obj.statements.iter() {
-            self.check_statement(scope, &statement)?;
-        }
-
-        Ok(())
-    }
-
-    pub fn check_symbol_table(&mut self) -> Result<(), CompilerError<'input>> {
-        let scopes = self.arena.iter().map(|s| s.id).collect::<Vec<_>>();
-
-        for scope in scopes {
-            self.check_scope(scope)?;
-        }
-
-        Ok(())
     }
 }
