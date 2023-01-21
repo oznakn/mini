@@ -1,4 +1,4 @@
-#[derive(Clone, Debug, Eq, PartialEq)]
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum VariableKind {
     Undefined,
     Null,
@@ -7,7 +7,7 @@ pub enum VariableKind {
     Number,
     Function {
         parameters: Vec<VariableKind>,
-        return_kind: Box<Option<VariableKind>>,
+        return_kind: Box<VariableKind>,
     },
 }
 

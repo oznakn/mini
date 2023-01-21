@@ -90,7 +90,7 @@ FunctionStatement: ast::Statement<'input> = {
         variable: ast::VariableDefinition {
             identifier,
             kind: Some(ast::VariableKind::Function {
-                return_kind: Box::new(None),
+                return_kind: Box::new(ast::VariableKind::Undefined),
                 parameters: parameters
                             .iter()
                             .map(|parameter| parameter.kind.as_ref().unwrap().clone())
@@ -105,7 +105,7 @@ FunctionStatement: ast::Statement<'input> = {
         variable: ast::VariableDefinition {
             identifier,
             kind: Some(ast::VariableKind::Function {
-                return_kind: Box::new(None),
+                return_kind: Box::new(ast::VariableKind::Undefined),
                 parameters: parameters
                             .iter()
                             .map(|parameter| parameter.kind.as_ref().unwrap().clone())
@@ -120,7 +120,7 @@ FunctionStatement: ast::Statement<'input> = {
         variable: ast::VariableDefinition {
             identifier,
             kind: Some(ast::VariableKind::Function {
-                return_kind: Box::new(Some(return_kind)),
+                return_kind: Box::new(return_kind),
                 parameters: parameters
                             .iter()
                             .map(|parameter| parameter.kind.as_ref().unwrap().clone())
