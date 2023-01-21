@@ -1,5 +1,7 @@
 // import fs from 'fs';
 
-let a;
-a = 10;
-a = 'hello';
+function y(a: number, b: number) {
+
+}
+
+y(1, 2);

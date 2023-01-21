@@ -15,6 +15,7 @@ pub struct Variable<'input> {
 
     pub definition: &'input ast::VariableDefinition<'input>,
     pub assignments: Vec<&'input ast::Expression<'input>>,
+    pub calls: Vec<&'input Vec<ast::Expression<'input>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -31,6 +32,9 @@ pub struct Scope<'input> {
 #[derive(Clone, Debug)]
 pub struct SymbolTable<'input> {
     pub global: NodeId,
+
+    pub program: &'input ast::Program<'input>,
+
     pub scope_arena: Vec<Scope<'input>>,
     pub variable_arena: Vec<Variable<'input>>,
 }
@@ -41,13 +45,15 @@ impl<'input> SymbolTable<'input> {
     ) -> Result<SymbolTable<'input>, CompilerError<'input>> {
         let mut symbol_table = SymbolTable {
             global: 0,
+            program,
             scope_arena: Vec::new(),
             variable_arena: Vec::new(),
         };
         symbol_table.new_scope(&program.statements)?;
 
-        symbol_table.build_assignments()?;
+        symbol_table.build_variable_fields()?;
         symbol_table.build_types()?;
+        symbol_table.check_types()?;
 
         Ok(symbol_table)
     }
@@ -68,7 +74,7 @@ impl<'input> SymbolTable<'input> {
             variables: IndexMap::new(),
         });
 
-        self.build_symbol_table(scope, statements)?;
+        self.build_scope(scope)?;
 
         Ok(scope)
     }
@@ -105,18 +111,17 @@ impl<'input> SymbolTable<'input> {
             definition,
             kinds: IndexSet::new(),
             assignments: Vec::new(),
+            calls: Vec::new(),
         });
         scope_obj.variables.insert(name, variable_entry);
 
         Ok(())
     }
 
-    fn build_symbol_table(
-        &mut self,
-        scope: NodeId,
-        statements: &'input Vec<ast::Statement<'input>>,
-    ) -> Result<(), CompilerError<'input>> {
-        for statement in statements {
+    fn build_scope(&mut self, scope: NodeId) -> Result<(), CompilerError<'input>> {
+        let scope_obj = self.scope_arena.get_mut(scope).unwrap();
+
+        for statement in scope_obj.statements {
             match statement {
                 ast::Statement::FunctionStatement {
                     variable,
@@ -241,18 +246,9 @@ impl<'input> SymbolTable<'input> {
 
                 match variable_obj.definition.kind.as_ref().unwrap() {
                     ast::VariableKind::Function {
-                        parameters,
+                        parameters: _,
                         return_kind,
-                    } => {
-                        if parameters.len() != arguments.len() {
-                            return Err(CompilerError::InvalidNumberOfArguments(
-                                parameters.len(),
-                                arguments.len(),
-                            ));
-                        }
-
-                        Ok(return_kind.as_ref().to_owned())
-                    }
+                    } => Ok(return_kind.as_ref().to_owned()),
                     _ => return Err(CompilerError::InvalidFunctionCall),
                 }
             }
@@ -261,7 +257,7 @@ impl<'input> SymbolTable<'input> {
 }
 
 impl<'input> SymbolTable<'input> {
-    fn build_assignments_for_expression(
+    fn build_variable_fields_for_expression(
         &mut self,
         scope: NodeId,
         expression: &'input ast::Expression<'input>,
@@ -277,19 +273,29 @@ impl<'input> SymbolTable<'input> {
                 variable_obj.assignments.push(expression);
             }
 
+            ast::Expression::CallExpression {
+                identifier,
+                arguments,
+            } => {
+                let variable = self.get_variable_identifier(scope, identifier)?;
+                let variable_obj = self.variable_arena.get_mut(variable).unwrap();
+
+                variable_obj.calls.push(arguments);
+            }
+
             _ => {}
         }
         Ok(())
     }
 
-    fn build_assignments_for_statement(
+    fn build_variable_fields_for_statement(
         &mut self,
         scope: NodeId,
         statement: &'input ast::Statement<'input>,
     ) -> Result<(), CompilerError<'input>> {
         match statement {
             ast::Statement::ExpressionStatement { expression } => {
-                self.build_assignments_for_expression(scope, expression)?;
+                self.build_variable_fields_for_expression(scope, expression)?;
             }
 
             _ => {}
@@ -298,21 +304,24 @@ impl<'input> SymbolTable<'input> {
         Ok(())
     }
 
-    fn build_assignments_for_scope(&mut self, scope: NodeId) -> Result<(), CompilerError<'input>> {
+    fn build_variable_fields_for_scope(
+        &mut self,
+        scope: NodeId,
+    ) -> Result<(), CompilerError<'input>> {
         let scope_obj = self.scope_arena.get_mut(scope).unwrap();
 
         for statement in scope_obj.statements {
-            self.build_assignments_for_statement(scope, statement)?;
+            self.build_variable_fields_for_statement(scope, statement)?;
         }
 
         Ok(())
     }
 
-    pub fn build_assignments(&mut self) -> Result<(), CompilerError<'input>> {
+    pub fn build_variable_fields(&mut self) -> Result<(), CompilerError<'input>> {
         let scopes = self.scope_arena.iter().map(|v| v.id).collect::<Vec<_>>();
 
         for scope in scopes {
-            self.build_assignments_for_scope(scope)?;
+            self.build_variable_fields_for_scope(scope)?;
         }
 
         Ok(())
@@ -360,6 +369,52 @@ impl<'input> SymbolTable<'input> {
 
         for variable in variables {
             self.build_types_for_variable(variable)?;
+        }
+
+        Ok(())
+    }
+}
+
+impl<'input> SymbolTable<'input> {
+    fn check_types_for_variable(&self, variable: NodeId) -> Result<(), CompilerError<'input>> {
+        let variable_obj = self.variable_arena.get(variable).unwrap();
+        for kind in &variable_obj.kinds {
+            if let ast::VariableKind::Function {
+                parameters,
+                return_kind: _,
+            } = kind
+            {
+                for arguments in &variable_obj.calls {
+                    if arguments.len() != parameters.len() {
+                        return Err(CompilerError::InvalidNumberOfArguments(
+                            parameters.len(),
+                            arguments.len(),
+                        ));
+                    }
+
+                    for (argument, parameter) in arguments.iter().zip(parameters.iter()) {
+                        let argument_kind =
+                            self.get_expression_kind(variable_obj.scope, argument)?;
+
+                        if argument_kind != *parameter {
+                            return Err(CompilerError::InvalidArgumentType(
+                                parameter.clone(),
+                                argument_kind,
+                            ));
+                        }
+                    }
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn check_types(&self) -> Result<(), CompilerError<'input>> {
+        let variables = self.variable_arena.iter().map(|v| v.id).collect::<Vec<_>>();
+
+        for variable in variables {
+            self.check_types_for_variable(variable)?;
         }
 
         Ok(())

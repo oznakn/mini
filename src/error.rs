@@ -2,6 +2,8 @@ use colored::Colorize;
 use lalrpop_util::{lexer::Token, ParseError};
 use std::fmt;
 
+use crate::ast;
+
 #[derive(Debug, Clone)]
 pub enum CompilerError<'input> {
     CliError(&'input str),
@@ -13,6 +15,7 @@ pub enum CompilerError<'input> {
     InvalidFunctionCall,
     InvalidNumberOfArguments(usize, usize),
     VariableTypeCannotBeInfered,
+    InvalidArgumentType(ast::VariableKind, ast::VariableKind),
 }
 
 impl<'input> fmt::Display for CompilerError<'input> {
@@ -83,6 +86,15 @@ impl<'input> fmt::Display for CompilerError<'input> {
             }
             CompilerError::VariableTypeCannotBeInfered => {
                 write!(f, "{}: cannot infer type of variable", "error:".red(),)
+            }
+            CompilerError::InvalidArgumentType(expected, got) => {
+                write!(
+                    f,
+                    "{}: expected argument of type `{}`, but got `{}`",
+                    "error:".red(),
+                    format!("{:?}", expected).yellow(),
+                    format!("{:?}", got).yellow(),
+                )
             }
         }
     }
