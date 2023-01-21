@@ -94,7 +94,19 @@ ImportStatement: ast::Statement<'input> = {
         };
 
         ast::Statement::ImportStatement {
-            identifier,
+            identifier: Some(identifier),
+            from: from.unwrap(),
+        }
+    },
+
+    "import" <s:String> ";" => {
+        let from = match s {
+            ast::Value::String(v) => Some(v),
+            _ => None,
+        };
+
+        ast::Statement::ImportStatement {
+            identifier: None,
             from: from.unwrap(),
         }
     },

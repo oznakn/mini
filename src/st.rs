@@ -130,14 +130,20 @@ impl<'input> SymbolTable<'input> {
         identifier: &'input ast::VariableIdentifier<'input>,
     ) -> Result<(), CompilerError<'input>> {
         match identifier {
-            ast::VariableIdentifier::Identifier(s) => self.check_variable_exists(scope, s),
-            ast::VariableIdentifier::Index { base, index: _ } => {
-                self.check_variable_identifier(scope, base.as_ref())
+            ast::VariableIdentifier::Identifier(s) => {
+                self.check_variable_exists(scope, s)?;
             }
+
+            ast::VariableIdentifier::Index { base, index: _ } => {
+                self.check_variable_identifier(scope, base.as_ref())?;
+            }
+
             ast::VariableIdentifier::Property { base, property: _ } => {
-                self.check_variable_identifier(scope, base.as_ref())
+                self.check_variable_identifier(scope, base.as_ref())?;
             }
         }
+
+        Ok(())
     }
 
     fn check_expression(
@@ -152,7 +158,7 @@ impl<'input> SymbolTable<'input> {
             } => {
                 self.check_variable_identifier(scope, identifier)?;
 
-                self.check_expression(scope, expression)
+                self.check_expression(scope, expression)?;
             }
 
             ast::Expression::CallExpression {
@@ -163,20 +169,24 @@ impl<'input> SymbolTable<'input> {
                     self.check_expression(scope, argument)?;
                 }
 
-                self.check_variable_identifier(scope, identifier)
+                self.check_variable_identifier(scope, identifier)?;
             }
 
             ast::Expression::UnaryExpression {
                 operator: _,
                 expression,
-            } => self.check_expression(scope, expression),
-
-            ast::Expression::VariableExpression { identifier } => {
-                self.check_variable_identifier(scope, identifier)
+            } => {
+                self.check_expression(scope, expression)?;
             }
 
-            _ => Ok(()),
+            ast::Expression::VariableExpression { identifier } => {
+                self.check_variable_identifier(scope, identifier)?;
+            }
+
+            _ => {}
         }
+
+        Ok(())
     }
 
     fn build(
@@ -204,7 +214,9 @@ impl<'input> SymbolTable<'input> {
                 from: _,
                 identifier,
             } => {
-                self.push_variable(scope, identifier)?;
+                if let Some(identifier) = identifier {
+                    self.push_variable(scope, identifier)?;
+                }
             }
 
             ast::Statement::DefinitionStatement {

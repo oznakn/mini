@@ -81,7 +81,7 @@ pub enum Statement<'input> {
         statements: Vec<Statement<'input>>,
     },
     ImportStatement {
-        identifier: &'input str,
+        identifier: Option<&'input str>,
         from: &'input str,
     },
     ExportStatement {
