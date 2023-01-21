@@ -8,6 +8,8 @@ pub enum CompilerError<'input> {
     ParserError(ParseError<usize, Token<'input>, &'static str>),
     VariableAlreadyDefined(&'input str),
     VariableNotDefined(&'input str),
+    CannotIndexOnType(&'input str),
+    PropertyNotExists(&'input str),
 }
 
 impl<'input> fmt::Display for CompilerError<'input> {
@@ -46,6 +48,22 @@ impl<'input> fmt::Display for CompilerError<'input> {
                     "{}: variable `{}` not defined",
                     "error:".red(),
                     v.yellow()
+                )
+            }
+            CompilerError::CannotIndexOnType(v) => {
+                write!(
+                    f,
+                    "{}: cannot index into a value of type `{}`",
+                    "error:".red(),
+                    v.yellow()
+                )
+            }
+            CompilerError::PropertyNotExists(p) => {
+                write!(
+                    f,
+                    "{}: property `{}` does not exist",
+                    "error:".red(),
+                    p.yellow()
                 )
             }
         }

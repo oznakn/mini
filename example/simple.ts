@@ -15,5 +15,7 @@ function zz(a: number, b: number) {
     let df = 40;
 }
 
+const console: number;
 
+console.log(console[a]);
 console.log(10);

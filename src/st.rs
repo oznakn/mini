@@ -1,16 +1,25 @@
-use std::collections::HashSet;
+use std::collections::HashMap;
 
 use crate::ast;
 use crate::error::CompilerError;
 
 type ScopeId = usize;
 
+type VariableMap<'input> = HashMap<&'input str, VariableMapEntry<'input>>;
+
+#[derive(Clone, Debug)]
+pub enum VariableMapEntry<'input> {
+    Primitive,
+    Array { properties: VariableMap<'input> },
+    Object { properties: VariableMap<'input> },
+}
+
 #[derive(Clone, Debug)]
 pub struct Scope<'input> {
     pub id: ScopeId,
     pub parent: Option<ScopeId>,
     pub scopes: Vec<ScopeId>,
-    pub variables: HashSet<&'input str>,
+    pub variables: VariableMap<'input>,
 }
 
 #[derive(Clone, Debug)]
@@ -43,7 +52,7 @@ impl<'input> SymbolTable<'input> {
             id: scope,
             parent: None,
             scopes: Vec::new(),
-            variables: HashSet::new(),
+            variables: HashMap::new(),
         });
 
         for statement in statements {
@@ -64,7 +73,7 @@ impl<'input> SymbolTable<'input> {
             id: scope,
             parent: None,
             scopes: Vec::new(),
-            variables: HashSet::new(),
+            variables: HashMap::new(),
         });
 
         for parameter in parameters {
@@ -97,11 +106,13 @@ impl<'input> SymbolTable<'input> {
     ) -> Result<(), CompilerError<'input>> {
         let scope_obj = self.arena.get_mut(scope).unwrap();
 
-        if scope_obj.variables.contains(name) {
+        if scope_obj.variables.contains_key(name) {
             return Err(CompilerError::VariableAlreadyDefined(name));
         }
 
-        scope_obj.variables.insert(name);
+        scope_obj
+            .variables
+            .insert(name, VariableMapEntry::Primitive);
 
         Ok(())
     }
@@ -110,11 +121,11 @@ impl<'input> SymbolTable<'input> {
         &self,
         scope: ScopeId,
         name: &'input str,
-    ) -> Result<(), CompilerError<'input>> {
+    ) -> Result<&VariableMapEntry, CompilerError<'input>> {
         let scope_obj = self.arena.get(scope).unwrap();
 
-        if scope_obj.variables.contains(name) {
-            return Ok(());
+        if scope_obj.variables.contains_key(name) {
+            return Ok(scope_obj.variables.get(name).unwrap());
         }
 
         if let Some(parent) = scope_obj.parent {
@@ -128,22 +139,43 @@ impl<'input> SymbolTable<'input> {
         &mut self,
         scope: ScopeId,
         identifier: &'input ast::VariableIdentifier<'input>,
-    ) -> Result<(), CompilerError<'input>> {
+    ) -> Result<&VariableMapEntry, CompilerError<'input>> {
         match identifier {
-            ast::VariableIdentifier::Identifier(s) => {
-                self.check_variable_exists(scope, s)?;
+            ast::VariableIdentifier::Identifier(s) => self.check_variable_exists(scope, s),
+
+            ast::VariableIdentifier::Index { base, index } => {
+                self.check_expression(scope, index.as_ref())?;
+
+                let base = self.check_variable_identifier(scope, base.as_ref())?;
+
+                if let VariableMapEntry::Array { properties: _ } = base {
+                    // TODO: return type of array
+                    Ok(&VariableMapEntry::Primitive)
+                } else {
+                    return Err(CompilerError::CannotIndexOnType("".as_ref()));
+                }
             }
 
-            ast::VariableIdentifier::Index { base, index: _ } => {
-                self.check_variable_identifier(scope, base.as_ref())?;
-            }
+            ast::VariableIdentifier::Property { base, property } => {
+                let base = self.check_variable_identifier(scope, base.as_ref())?;
 
-            ast::VariableIdentifier::Property { base, property: _ } => {
-                self.check_variable_identifier(scope, base.as_ref())?;
+                match base {
+                    VariableMapEntry::Object { properties } => {
+                        if properties.contains_key(property) {
+                            return Ok(properties.get(property).unwrap());
+                        }
+                    }
+                    VariableMapEntry::Array { properties } => {
+                        if properties.contains_key(property) {
+                            return Ok(properties.get(property).unwrap());
+                        }
+                    }
+                    _ => {}
+                }
+
+                Err(CompilerError::PropertyNotExists(property))
             }
         }
-
-        Ok(())
     }
 
     fn check_expression(
