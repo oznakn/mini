@@ -1,21 +1,37 @@
 #[derive(Clone, Debug)]
 pub enum VariableKind {
+    Undefined,
+    Null,
+    Boolean,
     String,
     Number,
     Function {
         parameters: Vec<VariableKind>,
         return_kind: Box<Option<VariableKind>>,
     },
-    Array {
-        kind: Box<VariableKind>,
-    },
 }
 
 #[derive(Clone, Debug)]
 pub enum Value<'input> {
+    Undefined,
+    Null,
+    Boolean(bool),
     Integer(u64),
     Float(f64),
     String(&'input str),
+}
+
+impl<'input> Value<'input> {
+    pub fn get_kind(&self) -> VariableKind {
+        match self {
+            Value::Undefined => VariableKind::Undefined,
+            Value::Null => VariableKind::Null,
+            Value::Boolean(_) => VariableKind::Boolean,
+            Value::Integer(_) => VariableKind::Number,
+            Value::Float(_) => VariableKind::Number,
+            Value::String(_) => VariableKind::String,
+        }
+    }
 }
 
 #[derive(Clone, Debug)]

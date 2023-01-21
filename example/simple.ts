@@ -1,10 +1,12 @@
 // import fs from 'fs';
 
-let a: number = 10;
+let a = 10;
 
-a = 10;
+let b = a;
 
-function zz(a: number, b: number): number {
-    let x: number = 10;
-    let df: number = 40;
-}
+// a = 10;
+
+// function zz(a: number, b: number): number {
+//     let x: number = 10;
+//     let df: number = 40;
+// }

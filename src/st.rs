@@ -113,7 +113,49 @@ impl<'input> SymbolTable<'input> {
         Ok(())
     }
 
-    fn check_variable_exists(
+    fn get_expression_result_kind(
+        &self,
+        scope: ScopeId,
+        expression: &'input ast::Expression<'input>,
+    ) -> Result<ast::VariableKind, CompilerError<'input>> {
+        match expression {
+            ast::Expression::ValueExpression { value } => Ok(value.get_kind()),
+
+            ast::Expression::VariableExpression { identifier } => self
+                .check_variable_identifier(scope, identifier)
+                .map(|v| v.clone()),
+
+            ast::Expression::CommaExpression { expressions } => {
+                if expressions.len() == 0 {
+                    return Ok(ast::VariableKind::Undefined);
+                }
+
+                self.get_expression_result_kind(scope, &expressions.last().unwrap())
+            }
+
+            ast::Expression::AssignmentExpression {
+                identifier: _,
+                expression,
+            } => self.get_expression_result_kind(scope, &expression),
+
+            ast::Expression::BinaryExpression {
+                operator: _,
+                left,
+                right: _,
+            } => self.get_expression_result_kind(scope, left),
+
+            ast::Expression::UnaryExpression {
+                operator: _,
+                expression,
+            } => self.get_expression_result_kind(scope, &expression),
+
+            ast::Expression::Empty => Ok(ast::VariableKind::Undefined),
+
+            _ => unimplemented!(),
+        }
+    }
+
+    fn check_variable(
         &self,
         scope: ScopeId,
         name: &'input str,
@@ -125,56 +167,20 @@ impl<'input> SymbolTable<'input> {
         }
 
         if let Some(parent) = scope_obj.parent {
-            return self.check_variable_exists(parent, name);
+            return self.check_variable(parent, name);
         }
 
         Err(CompilerError::VariableNotDefined(name))
     }
 
     fn check_variable_identifier(
-        &mut self,
+        &self,
         scope: ScopeId,
         identifier: &'input ast::VariableIdentifier<'input>,
     ) -> Result<&ast::VariableKind, CompilerError<'input>> {
         match identifier {
-            ast::VariableIdentifier::Identifier(s) => self.check_variable_exists(scope, s),
-
-            ast::VariableIdentifier::Index { base, index } => {
-                self.build_expression(scope, index.as_ref())?;
-
-                let base = self.check_variable_identifier(scope, base.as_ref())?;
-
-                if let ast::VariableKind::Array { kind } = base {
-                    Ok(&kind)
-                } else {
-                    return Err(CompilerError::CannotIndexOnType("".as_ref()));
-                }
-            }
-
-            ast::VariableIdentifier::Property { base, property: _ } => {
-                let _base = self.check_variable_identifier(scope, base.as_ref())?;
-
-                // match base {
-                //     VariableMapEntry::Object { properties } => {
-                //         if properties.contains_key(property) {
-                //             return Ok(properties.get(property).unwrap());
-                //         }
-                //     }
-                //     VariableMapEntry::Array {
-                //         kind: _,
-                //         properties,
-                //     } => {
-                //         if properties.contains_key(property) {
-                //             return Ok(properties.get(property).unwrap());
-                //         }
-                //     }
-                //     _ => {}
-                // }
-
-                // Err(CompilerError::PropertyNotExists(property))
-
-                unimplemented!()
-            }
+            ast::VariableIdentifier::Identifier(s) => self.check_variable(scope, s),
+            _ => unimplemented!(),
         }
     }
 
@@ -274,11 +280,18 @@ impl<'input> SymbolTable<'input> {
 
             ast::Statement::DefinitionStatement {
                 is_const: _,
-                expression: _,
+                expression,
                 variable,
             } => {
-                // TODO: do not unwrap the value
-                self.push_variable(scope, variable.identifier, variable.kind.as_ref().unwrap())?;
+                if let Some(kind) = &variable.kind {
+                    self.push_variable(scope, variable.identifier, kind)?;
+                } else if let Some(expression) = expression {
+                    let kind = self.get_expression_result_kind(scope, expression)?;
+
+                    self.push_variable(scope, variable.identifier, &kind)?;
+                } else {
+                    unreachable!("Definition statement must have either a kind or an expression")
+                }
             }
 
             ast::Statement::BodyStatement { statements } => {

@@ -38,6 +38,11 @@ match {
     "string",
     "number",
 
+    "true",
+    "false",
+    "undefined",
+    "null",
+
     "function",
     "export",
     "import",
@@ -135,7 +140,7 @@ FunctionStatement: ast::Statement<'input> = {
 };
 
 DefinitionStatement: ast::Statement<'input> = {
-    "let" <definition:VariableDefinitionOptionalKind> ";" => ast::Statement::DefinitionStatement {
+    "let" <definition:VariableDefinition> ";" => ast::Statement::DefinitionStatement {
         is_const: false,
         variable: definition,
         expression: None,
@@ -145,7 +150,7 @@ DefinitionStatement: ast::Statement<'input> = {
         variable: definition,
         expression: Some(e),
     },
-    "const" <definition:VariableDefinitionOptionalKind> ";" => ast::Statement::DefinitionStatement {
+    "const" <definition:VariableDefinition> ";" => ast::Statement::DefinitionStatement {
         is_const: true,
         variable: definition,
         expression: None,
@@ -293,6 +298,10 @@ Number: ast::Value<'input> = {
 Value: ast::Value<'input> = {
     Number,
     String,
+    "true" => ast::Value::Boolean(true),
+    "false" => ast::Value::Boolean(false),
+    "undefined" => ast::Value::Undefined,
+    "null" => ast::Value::Null,
 };
 
 VariableKind: ast::VariableKind = {
