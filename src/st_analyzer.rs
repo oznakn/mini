@@ -3,46 +3,53 @@ use crate::error::CompilerError;
 use crate::st::*;
 
 impl<'input> SymbolTable<'input> {
-    pub fn get_variable_kind(
+    pub fn get_variable(
         &self,
-        scope: ScopeId,
+        scope: NodeId,
         name: &'input str,
-    ) -> Result<&ast::VariableKind, CompilerError<'input>> {
-        let scope_obj = self.arena.get(scope).unwrap();
+    ) -> Result<NodeId, CompilerError<'input>> {
+        let scope_obj = self.scope_arena.get(scope).unwrap();
 
-        if scope_obj.variables.contains_key(name) {
-            return Ok(scope_obj.variables.get(name).unwrap());
+        if let Some(variable) = scope_obj.variables.get(name) {
+            return Ok(variable.to_owned());
         }
 
         if let Some(parent) = scope_obj.parent {
-            return self.get_variable_kind(parent, name);
+            return self.get_variable(parent, name);
         }
 
         Err(CompilerError::VariableNotDefined(name))
     }
 
-    pub fn get_variable_identifier_kind(
+    pub fn get_variable_identifier(
         &self,
-        scope: ScopeId,
+        scope: NodeId,
         identifier: &'input ast::VariableIdentifier<'input>,
-    ) -> Result<&ast::VariableKind, CompilerError<'input>> {
+    ) -> Result<NodeId, CompilerError<'input>> {
         match identifier {
-            ast::VariableIdentifier::Identifier(s) => self.get_variable_kind(scope, s),
+            ast::VariableIdentifier::Identifier(s) => self.get_variable(scope, s),
             _ => unimplemented!(),
         }
     }
 
     pub fn get_expression_kind(
         &self,
-        scope: ScopeId,
+        scope: NodeId,
         expression: &'input ast::Expression<'input>,
     ) -> Result<ast::VariableKind, CompilerError<'input>> {
         match expression {
             ast::Expression::ValueExpression { value } => Ok(value.get_kind()),
 
-            ast::Expression::VariableExpression { identifier } => self
-                .get_variable_identifier_kind(scope, identifier)
-                .map(|v| v.clone()),
+            ast::Expression::VariableExpression { identifier } => {
+                let variable = self.get_variable_identifier(scope, identifier)?;
+                let variable_obj = self.variable_arena.get(variable).unwrap();
+
+                if let Some(kind) = &variable_obj.definition.kind {
+                    return Ok(kind.clone());
+                }
+
+                Err(CompilerError::VariableTypeCannotBeInfered)
+            }
 
             ast::Expression::CommaExpression { expressions } => {
                 if expressions.len() == 0 {
@@ -84,8 +91,10 @@ impl<'input> SymbolTable<'input> {
                     self.get_expression_kind(scope, argument)?;
                 }
 
-                let called_function = self.get_variable_identifier_kind(scope, identifier)?;
-                match called_function {
+                let variable = self.get_variable_identifier(scope, identifier)?;
+                let variable_obj = self.variable_arena.get(variable).unwrap();
+
+                match variable_obj.definition.kind.as_ref().unwrap() {
                     ast::VariableKind::Function {
                         parameters,
                         return_kind,
@@ -107,5 +116,67 @@ impl<'input> SymbolTable<'input> {
                 }
             }
         }
+    }
+}
+
+impl<'input> SymbolTable<'input> {
+    fn build_references_for_expression(
+        &mut self,
+        scope: NodeId,
+        expression: &'input ast::Expression<'input>,
+    ) -> Result<(), CompilerError<'input>> {
+        match expression {
+            ast::Expression::AssignmentExpression {
+                identifier,
+                expression: _,
+            } => {
+                let variable = self.get_variable_identifier(scope, identifier)?;
+                let variable_obj = self.variable_arena.get_mut(variable).unwrap();
+
+                variable_obj.references.push(expression);
+            }
+
+            _ => {}
+        }
+        Ok(())
+    }
+
+    fn build_references_for_statement(
+        &mut self,
+        scope: NodeId,
+        statement: &'input ast::Statement<'input>,
+    ) -> Result<(), CompilerError<'input>> {
+        match statement {
+            ast::Statement::ExpressionStatement { expression } => {
+                self.build_references_for_expression(scope, expression)?;
+            }
+
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    pub fn build_references_for_scope(
+        &mut self,
+        scope: NodeId,
+    ) -> Result<(), CompilerError<'input>> {
+        let scope_obj = self.scope_arena.get_mut(scope).unwrap();
+
+        for statement in scope_obj.statements {
+            self.build_references_for_statement(scope, statement)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn build_references(&mut self) -> Result<(), CompilerError<'input>> {
+        let scopes = self.scope_arena.iter().map(|v| v.id).collect::<Vec<_>>();
+
+        for scope in scopes {
+            self.build_references_for_scope(scope)?;
+        }
+
+        Ok(())
     }
 }

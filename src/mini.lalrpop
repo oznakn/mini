@@ -83,71 +83,51 @@ Statement: ast::Statement<'input> = {
     ";" => ast::Statement::EmptyStatement,
     DefinitionStatement,
     FunctionStatement,
-    ImportStatement,
-    ExportStatement,
-    BodyStatement,
-};
-
-BodyStatement: ast::Statement<'input> =
-    <statements:Body> => ast::Statement::BodyStatement {
-        statements
-    };
-
-ImportStatement: ast::Statement<'input> = {
-    "import" <identifier:Identifier> "from" <s:String> ";" => {
-        let from = match s {
-            ast::Value::String(v) => Some(v),
-            _ => None,
-        };
-
-        ast::Statement::ImportStatement {
-            identifier: Some(identifier),
-            from: from.unwrap(),
-        }
-    },
-
-    "import" <s:String> ";" => {
-        let from = match s {
-            ast::Value::String(v) => Some(v),
-            _ => None,
-        };
-
-        ast::Statement::ImportStatement {
-            identifier: None,
-            from: from.unwrap(),
-        }
-    },
-};
-
-ExportStatement: ast::Statement<'input> = {
-    "export" <s:FunctionStatement> => ast::Statement::ExportStatement {
-        statement: Box::new(s),
-    },
-    "export" "const" <definition:VariableDefinitionOptionalKind> "=" <e:Expression> ";" => ast::Statement::ExportStatement {
-        statement: Box::new(ast::Statement::DefinitionStatement {
-            is_const: true,
-            variable: definition,
-            expression: Some(e),
-        }),
-    },
 };
 
 FunctionStatement: ast::Statement<'input> = {
     "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" <statements:Body> => ast::Statement::FunctionStatement {
-        identifier,
-        return_kind: None,
+        variable: ast::VariableDefinition {
+            identifier,
+            kind: Some(ast::VariableKind::Function {
+                return_kind: Box::new(None),
+                parameters: parameters
+                            .iter()
+                            .map(|parameter| parameter.kind.as_ref().unwrap().clone())
+                            .collect(),
+            }),
+            is_const: true,
+        },
         parameters,
         statements,
     },
     "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" ":" "void" <statements:Body> => ast::Statement::FunctionStatement {
-        identifier,
-        return_kind: None,
+        variable: ast::VariableDefinition {
+            identifier,
+            kind: Some(ast::VariableKind::Function {
+                return_kind: Box::new(None),
+                parameters: parameters
+                            .iter()
+                            .map(|parameter| parameter.kind.as_ref().unwrap().clone())
+                            .collect(),
+            }),
+            is_const: true,
+        },
         parameters,
         statements,
     },
     "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" ":" <return_kind:VariableKind> <statements:Body> => ast::Statement::FunctionStatement {
-        identifier,
-        return_kind: Some(return_kind),
+        variable: ast::VariableDefinition {
+            identifier,
+            kind: Some(ast::VariableKind::Function {
+                return_kind: Box::new(Some(return_kind)),
+                parameters: parameters
+                            .iter()
+                            .map(|parameter| parameter.kind.as_ref().unwrap().clone())
+                            .collect(),
+            }),
+            is_const: true,
+        },
         parameters,
         statements,
     },
@@ -155,24 +135,30 @@ FunctionStatement: ast::Statement<'input> = {
 
 DefinitionStatement: ast::Statement<'input> = {
     "let" <definition:VariableDefinitionOptionalKind> ";" => ast::Statement::DefinitionStatement {
-        is_const: false,
         variable: definition,
         expression: None,
     },
     "let" <definition:VariableDefinitionOptionalKind> "=" <e:Expression> ";" => ast::Statement::DefinitionStatement {
-        is_const: false,
         variable: definition,
         expression: Some(e),
     },
-    "const" <definition:VariableDefinitionOptionalKind> ";" => ast::Statement::DefinitionStatement {
-        is_const: true,
-        variable: definition,
-        expression: None,
+    "const" <definition:VariableDefinitionOptionalKind> ";" => {
+        let mut definition = definition;
+        definition.is_const = true;
+
+        ast::Statement::DefinitionStatement {
+            variable: definition,
+            expression: None,
+        }
     },
-    "const" <definition:VariableDefinitionOptionalKind> "=" <e:Expression> ";" => ast::Statement::DefinitionStatement {
-        is_const: true,
-        variable: definition,
-        expression: Some(e),
+    "const" <definition:VariableDefinitionOptionalKind> "=" <e:Expression> ";" => {
+        let mut definition = definition;
+        definition.is_const = true;
+
+        ast::Statement::DefinitionStatement {
+            variable: definition,
+            expression: Some(e),
+        }
     },
 }
 
@@ -260,6 +246,7 @@ VariableDefinition: ast::VariableDefinition<'input> = {
     <identifier:Identifier> ":" <kind:VariableKind> => ast::VariableDefinition {
         identifier,
         kind: Some(kind),
+        is_const: false,
     },
 }
 
@@ -268,6 +255,7 @@ VariableDefinitionOptionalKind: ast::VariableDefinition<'input> = {
     <identifier:Identifier> => ast::VariableDefinition {
         identifier,
         kind: None,
+        is_const: false,
     },
 }
 

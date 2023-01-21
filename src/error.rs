@@ -12,7 +12,7 @@ pub enum CompilerError<'input> {
     PropertyNotExists(&'input str),
     InvalidFunctionCall,
     InvalidNumberOfArguments(usize, usize),
-    VariableTypeCannotBeInfered(&'input str),
+    VariableTypeCannotBeInfered,
 }
 
 impl<'input> fmt::Display for CompilerError<'input> {
@@ -81,13 +81,8 @@ impl<'input> fmt::Display for CompilerError<'input> {
                     got
                 )
             }
-            CompilerError::VariableTypeCannotBeInfered(v) => {
-                write!(
-                    f,
-                    "{}: cannot infer type of variable `{}`",
-                    "error:".red(),
-                    v
-                )
+            CompilerError::VariableTypeCannotBeInfered => {
+                write!(f, "{}: cannot infer type of variable", "error:".red(),)
             }
         }
     }

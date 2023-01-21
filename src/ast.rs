@@ -76,6 +76,7 @@ pub enum VariableIdentifier<'input> {
 
 #[derive(Clone, Debug)]
 pub struct VariableDefinition<'input> {
+    pub is_const: bool,
     pub identifier: &'input str,
     pub kind: Option<VariableKind>,
 }
@@ -91,25 +92,13 @@ pub enum Statement<'input> {
         expression: Expression<'input>,
     },
     DefinitionStatement {
-        is_const: bool,
         variable: VariableDefinition<'input>,
         expression: Option<Expression<'input>>,
     },
-    BodyStatement {
-        statements: Vec<Statement<'input>>,
-    },
     FunctionStatement {
-        identifier: &'input str,
-        return_kind: Option<VariableKind>,
+        variable: VariableDefinition<'input>,
         parameters: Vec<VariableDefinition<'input>>,
         statements: Vec<Statement<'input>>,
-    },
-    ImportStatement {
-        identifier: Option<&'input str>,
-        from: &'input str,
-    },
-    ExportStatement {
-        statement: Box<Statement<'input>>,
     },
     EmptyStatement,
 }
