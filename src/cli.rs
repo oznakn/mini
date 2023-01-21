@@ -17,9 +17,12 @@ fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
         .parse(&content)
         .map_err(|err| CompilerError::ParserError(err).to_string())?;
 
-    let scope = st::SymbolTable::from_program(&program).map_err(|err| err.to_string())?;
+    let mut symbol_table = st::SymbolTable::from(&program).map_err(|err| err.to_string())?;
+    symbol_table
+        .check_symbol_table()
+        .map_err(|err| err.to_string())?;
 
-    dbg!(&scope);
+    dbg!(&symbol_table);
 
     Ok(())
 }

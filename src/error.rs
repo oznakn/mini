@@ -10,6 +10,8 @@ pub enum CompilerError<'input> {
     VariableNotDefined(&'input str),
     CannotIndexOnType(&'input str),
     PropertyNotExists(&'input str),
+    InvalidFunctionCall,
+    InvalidNumberOfArguments(usize, usize),
 }
 
 impl<'input> fmt::Display for CompilerError<'input> {
@@ -64,6 +66,18 @@ impl<'input> fmt::Display for CompilerError<'input> {
                     "{}: property `{}` does not exist",
                     "error:".red(),
                     p.yellow()
+                )
+            }
+            CompilerError::InvalidFunctionCall => {
+                write!(f, "{}: invalid function call", "error:".red(),)
+            }
+            CompilerError::InvalidNumberOfArguments(expected, got) => {
+                write!(
+                    f,
+                    "{}: function expected {} arguments, but got {}",
+                    "error:".red(),
+                    expected,
+                    got
                 )
             }
         }

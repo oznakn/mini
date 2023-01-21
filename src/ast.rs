@@ -121,22 +121,12 @@ pub enum Expression<'input> {
     VariableExpression {
         identifier: VariableIdentifier<'input>,
     },
-    FunctionExpression {
-        identifier: Option<&'input str>,
-        return_kind: Option<VariableKind>,
-        parameters: Vec<VariableDefinition<'input>>,
-        statements: Vec<Statement<'input>>,
-    },
     CallExpression {
         identifier: VariableIdentifier<'input>,
         arguments: Vec<Expression<'input>>,
     },
     CommaExpression {
         expressions: Vec<Expression<'input>>,
-    },
-    AssignmentExpression {
-        identifier: VariableIdentifier<'input>,
-        expression: Box<Expression<'input>>,
     },
     UnaryExpression {
         operator: UnaryOperator,

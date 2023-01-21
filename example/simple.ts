@@ -6,7 +6,7 @@ let b = a;
 
 // a = 10;
 
-const d = function zz(a: number, b: number) {
+function sum(a: number, b: number) {
     let x: number = 10;
     let df: number = 40;
 };

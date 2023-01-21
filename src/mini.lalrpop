@@ -74,7 +74,7 @@ pub Program: ast::Program<'input> =
         statements,
     };
 
-StatementList = <Statement*>;
+StatementList = (<Statement> ";"?)*;
 
 Body = "{" <StatementList> "}";
 
@@ -176,55 +176,8 @@ DefinitionStatement: ast::Statement<'input> = {
 }
 
 Expression: ast::Expression<'input> = {
-    AssignmentExpression,
-    FunctionExpression,
     LogicalTerm,
 };
-
-FunctionExpression: ast::Expression<'input> = {
-    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" <statements:Body> => ast::Expression::FunctionExpression {
-        identifier: Some(identifier),
-        return_kind: None,
-        parameters,
-        statements,
-    },
-    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" ":" "void" <statements:Body> => ast::Expression::FunctionExpression {
-        identifier: Some(identifier),
-        return_kind: None,
-        parameters,
-        statements,
-    },
-    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" ":" <return_kind:VariableKind> <statements:Body> => ast::Expression::FunctionExpression {
-        identifier: Some(identifier),
-        return_kind: Some(return_kind),
-        parameters,
-        statements,
-    },
-    "function" "(" <parameters:CommaList<VariableDefinition>> ")" <statements:Body> => ast::Expression::FunctionExpression {
-        identifier: None,
-        return_kind: None,
-        parameters,
-        statements,
-    },
-    "function" "(" <parameters:CommaList<VariableDefinition>> ")" ":" "void" <statements:Body> => ast::Expression::FunctionExpression {
-        identifier: None,
-        return_kind: None,
-        parameters,
-        statements,
-    },
-    "function" "(" <parameters:CommaList<VariableDefinition>> ")" ":" <return_kind:VariableKind> <statements:Body> => ast::Expression::FunctionExpression {
-        identifier: None,
-        return_kind: Some(return_kind),
-        parameters,
-        statements,
-    },
-}
-
-AssignmentExpression: ast::Expression<'input> =
-    <identifier:VariableIdentifier> "=" <e:Expression> => ast::Expression::AssignmentExpression {
-        identifier,
-        expression: Box::new(e),
-    };
 
 LogicalTerm: ast::Expression<'input> = {
     <left:LogicalTerm> <operator:LogicalOperator> <right:AddTerm> => ast::Expression::BinaryExpression {
