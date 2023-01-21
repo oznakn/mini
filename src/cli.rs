@@ -16,7 +16,7 @@ fn print_error(err: impl fmt::Display) {
 }
 
 fn compile() -> Result<(), ParseError<usize, Token<'static>, &'static str>> {
-    let program = mini::ProgramParser::new().parse("hello, world")?;
+    let program = mini::ProgramParser::new().parse("hello; world")?;
 
     dbg!(&program);
 

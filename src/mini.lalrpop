@@ -1,10 +1,11 @@
-#[LALR]
-
 grammar;
+
+use crate::ast;
 
 match {
     ",",
     ".",
+    ";",
     r"[a-zA-Z0-9]+",
 
     // Skip whitespace and comments
@@ -13,7 +14,6 @@ match {
     r"/\*([^\*]*\*+[^\*/])*([^\*]*\*+|[^\*])*\*/" => { }, // `/* comment */`
 }
 
-use crate::ast;
 
 List<T>: Vec<T> = {
     <items: (<T> ",")*> <last: T?> => {
@@ -23,15 +23,23 @@ List<T>: Vec<T> = {
     }
 };
 
-pub Program: ast::Program =
-    <identifier_list:IdentifierList> => ast::Program {
-        identifier_list,
+pub Program: ast::Program<'input> =
+    <statement_list:StatementList> => ast::Program {
+        statement_list,
     };
 
-IdentifierList =
-    List<Identifier>;
+Statement: ast::Statement<'input> = {
+    <expression:Expression> ";"? => ast::Statement::ExpressionStatement(expression),
+};
 
-Identifier: ast::Identifier =
+StatementList =
+    Statement*;
+
+Expression: ast::Expression<'input> = {
+    <identifier:Identifier> => ast::Expression::AssignmentExpression { identifier },
+};
+
+Identifier: ast::Identifier<'input> =
     <name:r"[a-zA-Z0-9]+"> => ast::Identifier {
-        name: name.to_string(),
+        name,
     };
