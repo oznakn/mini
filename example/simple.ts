@@ -1,9 +1,14 @@
-let a: number;
+// import fs from 'fs';
 
-a = 10;
+// let a: number = 10;
 
-{
-    let b = a + 10;
+// a = 10;
 
-    const c = a + b;
-}
+// {
+//     let b = a + 10;
+
+//     const c = a + b;
+// }
+
+
+console.log(10);

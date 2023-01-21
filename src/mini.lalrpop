@@ -31,6 +31,8 @@ match {
     "}",
     "(",
     ")",
+    "[",
+    "]",
     "let",
     "const",
     "string",
@@ -39,6 +41,7 @@ match {
     "function",
     "export",
     "import",
+    "from",
 
     r"[0-9]+",
     r"[0-9]+\.[0-9]+",
@@ -73,6 +76,7 @@ Statement: ast::Statement<'input> = {
     <expression:Expression> ";" => ast::Statement::ExpressionStatement { expression },
     DefinitionStatement,
     FunctionStatement,
+    ImportStatement,
     ExportStatement,
     BodyStatement,
 };
@@ -81,6 +85,20 @@ BodyStatement: ast::Statement<'input> =
     <statements:Body> => ast::Statement::BodyStatement {
         statements
     };
+
+ImportStatement: ast::Statement<'input> = {
+    "import" <identifier:Identifier> "from" <s:String> ";" => {
+        let from = match s {
+            ast::Value::String(v) => Some(v),
+            _ => None,
+        };
+
+        ast::Statement::ImportStatement {
+            identifier,
+            from: from.unwrap(),
+        }
+    },
+};
 
 ExportStatement: ast::Statement<'input> = {
     "export" <s:FunctionStatement> => ast::Statement::ExportStatement {
@@ -146,7 +164,7 @@ FunctionExpression: ast::Expression<'input> = {
 }
 
 AssignmentExpression: ast::Expression<'input> =
-    <identifier:Identifier> "=" <e:Expression> => ast::Expression::AssignmentExpression {
+    <identifier:VariableIdentifier> "=" <e:Expression> => ast::Expression::AssignmentExpression {
         identifier,
         expression: Box::new(e),
     };
@@ -184,7 +202,8 @@ Factor: ast::Expression<'input> = {
         expression: Box::new(e),
     },
     <value:Value> => ast::Expression::ValueExpression { value },
-    <identifier:Identifier> => ast::Expression::VariableExpression { identifier },
+    <identifier:VariableIdentifier> => ast::Expression::VariableExpression { identifier },
+    <identifier:VariableIdentifier> "(" <arguments:CommaList<Expression>> ")" => ast::Expression::CallExpression { identifier, arguments },
     "(" <e:Expression> ")" => e,
 };
 
@@ -230,14 +249,31 @@ VariableDefinition: ast::VariableDefinition<'input> = {
     },
 }
 
+VariableIdentifier: ast::VariableIdentifier<'input> = {
+    <identifier:Identifier> => ast::VariableIdentifier::Identifier(identifier),
+    <base:VariableIdentifier> "." <property:Identifier> => ast::VariableIdentifier::Property {
+        base: Box::new(base),
+        property,
+    },
+    <base:VariableIdentifier> "[" <index:Expression> "]" => ast::VariableIdentifier::Index { base: Box::new(base), index: Box::new(index) },
+};
+
 Identifier: &'input str =
     <name:r"[a-zA-Z][a-zA-Z0-9]*"> => name;
 
-Value: ast::Value<'input> = {
-    <value:r"[0-9]+"> => ast::Value::Integer(u64::from_str(<>).unwrap()),
-    <value:r"[0-9]+\.[0-9]+"> => ast::Value::Float(f64::from_str(<>).unwrap()),
+String: ast::Value<'input> = {
     <value:r"'[^\n\r']*'"> => ast::Value::String(&<>[1..<>.len()-1]),
     <value:r"`[^\n\r`]*`"> => ast::Value::String(&<>[1..<>.len()-1]),
+};
+
+Number: ast::Value<'input> = {
+    <value:r"[0-9]+"> => ast::Value::Integer(u64::from_str(<>).unwrap()),
+    <value:r"[0-9]+\.[0-9]+"> => ast::Value::Float(f64::from_str(<>).unwrap()),
+}
+
+Value: ast::Value<'input> = {
+    Number,
+    String,
 };
 
 VariableType: ast::VariableType = {

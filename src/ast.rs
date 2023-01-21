@@ -39,6 +39,19 @@ pub enum BinaryOperator {
 }
 
 #[derive(Clone, Debug)]
+pub enum VariableIdentifier<'input> {
+    Identifier(&'input str),
+    Index {
+        base: Box<VariableIdentifier<'input>>,
+        index: Box<Expression<'input>>,
+    },
+    Property {
+        base: Box<VariableIdentifier<'input>>,
+        property: &'input str,
+    },
+}
+
+#[derive(Clone, Debug)]
 pub struct VariableDefinition<'input> {
     pub identifier: &'input str,
     pub variable_type: Option<VariableType>,
@@ -67,6 +80,10 @@ pub enum Statement<'input> {
         parameters: Vec<VariableDefinition<'input>>,
         statements: Vec<Statement<'input>>,
     },
+    ImportStatement {
+        identifier: &'input str,
+        from: &'input str,
+    },
     ExportStatement {
         statement: Box<Statement<'input>>,
     },
@@ -78,15 +95,22 @@ pub enum Expression<'input> {
         value: Value<'input>,
     },
     VariableExpression {
-        identifier: &'input str,
+        identifier: VariableIdentifier<'input>,
     },
     FunctionExpression {
         identifier: Option<&'input str>,
         parameters: Vec<VariableDefinition<'input>>,
         statements: Vec<Statement<'input>>,
     },
+    CallExpression {
+        identifier: VariableIdentifier<'input>,
+        arguments: Vec<Expression<'input>>,
+    },
+    CommaExpression {
+        expressions: Vec<Expression<'input>>,
+    },
     AssignmentExpression {
-        identifier: &'input str,
+        identifier: VariableIdentifier<'input>,
         expression: Box<Expression<'input>>,
     },
     UnaryExpression {
