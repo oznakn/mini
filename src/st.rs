@@ -271,6 +271,10 @@ impl<'input> SymbolTable<'input> {
                 let variable = self.get_variable_identifier(scope, identifier)?;
                 let variable_obj = self.variable_arena.get_mut(variable).unwrap();
 
+                if variable_obj.definition.is_writable == false {
+                    return Err(CompilerError::CannotAssignConstVariable);
+                }
+
                 variable_obj.assignments.push(expression);
             }
 

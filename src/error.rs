@@ -16,6 +16,7 @@ pub enum CompilerError<'input> {
     InvalidNumberOfArguments(usize, usize),
     VariableTypeCannotBeInfered,
     InvalidArgumentType(ast::VariableKind, ast::VariableKind),
+    CannotAssignConstVariable,
 }
 
 impl<'input> fmt::Display for CompilerError<'input> {
@@ -95,6 +96,9 @@ impl<'input> fmt::Display for CompilerError<'input> {
                     expected.get_name().yellow(),
                     got.get_name().yellow(),
                 )
+            }
+            CompilerError::CannotAssignConstVariable => {
+                write!(f, "{}: cannot assign to a const variable", "error:".red())
             }
         }
     }
