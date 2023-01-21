@@ -125,6 +125,23 @@ impl<'input> SymbolTable<'input> {
                 .check_variable_identifier(scope, identifier)
                 .map(|v| v.clone()),
 
+            ast::Expression::FunctionExpression {
+                identifier: _,
+                return_kind,
+                parameters,
+                statements: _,
+            } => {
+                let kind = ast::VariableKind::Function {
+                    parameters: parameters
+                        .iter()
+                        .map(|parameter| parameter.kind.as_ref().unwrap().clone())
+                        .collect(),
+                    return_kind: Box::new(return_kind.clone()),
+                };
+
+                Ok(kind)
+            }
+
             ast::Expression::CommaExpression { expressions } => {
                 if expressions.len() == 0 {
                     return Ok(ast::VariableKind::Undefined);

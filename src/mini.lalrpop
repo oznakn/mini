@@ -43,6 +43,7 @@ match {
     "undefined",
     "null",
 
+    "void",
     "function",
     "export",
     "import",
@@ -131,6 +132,18 @@ ExportStatement: ast::Statement<'input> = {
 };
 
 FunctionStatement: ast::Statement<'input> = {
+    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" <statements:Body> => ast::Statement::FunctionStatement {
+        identifier,
+        return_kind: None,
+        parameters,
+        statements,
+    },
+    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" ":" "void" <statements:Body> => ast::Statement::FunctionStatement {
+        identifier,
+        return_kind: None,
+        parameters,
+        statements,
+    },
     "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" ":" <return_kind:VariableKind> <statements:Body> => ast::Statement::FunctionStatement {
         identifier,
         return_kind: Some(return_kind),
@@ -169,9 +182,33 @@ Expression: ast::Expression<'input> = {
 };
 
 FunctionExpression: ast::Expression<'input> = {
+    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" <statements:Body> => ast::Expression::FunctionExpression {
+        identifier: Some(identifier),
+        return_kind: None,
+        parameters,
+        statements,
+    },
+    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" ":" "void" <statements:Body> => ast::Expression::FunctionExpression {
+        identifier: Some(identifier),
+        return_kind: None,
+        parameters,
+        statements,
+    },
     "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" ":" <return_kind:VariableKind> <statements:Body> => ast::Expression::FunctionExpression {
         identifier: Some(identifier),
         return_kind: Some(return_kind),
+        parameters,
+        statements,
+    },
+    "function" "(" <parameters:CommaList<VariableDefinition>> ")" <statements:Body> => ast::Expression::FunctionExpression {
+        identifier: None,
+        return_kind: None,
+        parameters,
+        statements,
+    },
+    "function" "(" <parameters:CommaList<VariableDefinition>> ")" ":" "void" <statements:Body> => ast::Expression::FunctionExpression {
+        identifier: None,
+        return_kind: None,
         parameters,
         statements,
     },
