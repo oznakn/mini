@@ -1,5 +1,18 @@
 #[derive(Clone, Debug)]
-pub struct Identifier<'input> {
+pub enum Value<'input> {
+    Integer(u64),
+    Float(f64),
+    String(&'input str),
+}
+
+#[derive(Clone, Debug)]
+pub enum VariableType {
+    String,
+    Number,
+}
+
+#[derive(Clone, Debug)]
+pub struct VariableIdentifier<'input> {
     pub name: &'input str,
 }
 
@@ -10,11 +23,27 @@ pub struct Program<'input> {
 
 #[derive(Clone, Debug)]
 pub enum Statement<'input> {
-    ExpressionStatement(Expression<'input>),
+    ExpressionStatement {
+        expression: Expression<'input>,
+    },
+    DefinitionStatement {
+        identifier: VariableIdentifier<'input>,
+        variable_type: VariableType,
+        is_const: bool,
+    },
 }
 
 #[derive(Clone, Debug)]
 pub enum Expression<'input> {
-    AssignmentExpression { identifier: Identifier<'input> },
+    ValueExpression {
+        value: Value<'input>,
+    },
+    VariableExpression {
+        identifier: VariableIdentifier<'input>,
+    },
+    AssignmentExpression {
+        identifier: VariableIdentifier<'input>,
+        expression: Box<Expression<'input>>,
+    },
     Empty,
 }

@@ -1,12 +1,23 @@
 grammar;
 
+use std::str::FromStr;
+
 use crate::ast;
 
 match {
     ",",
     ".",
     ";",
-    r"[a-zA-Z0-9]+",
+    ":",
+    "=",
+    "let",
+    "const",
+    "string",
+    "number",
+    r"[0-9]+",
+    r"[0-9]+\.[0-9]+",
+    r"[a-zA-Z][a-zA-Z0-9]*",
+    r"'[^\n\r]*'",
 
     // Skip whitespace and comments
     r"\s*" => { },
@@ -14,8 +25,7 @@ match {
     r"/\*([^\*]*\*+[^\*/])*([^\*]*\*+|[^\*])*\*/" => { }, // `/* comment */`
 }
 
-
-List<T>: Vec<T> = {
+CommaList<T>: Vec<T> = {
     <items: (<T> ",")*> <last: T?> => {
         let mut items = items;
         items.extend(last);
@@ -23,23 +33,43 @@ List<T>: Vec<T> = {
     }
 };
 
+SemiColonList<T>: Vec<T> = {
+    <items: (<T> ";")*> <last: T?> => {
+        let mut items = items;
+        items.extend(last);
+        items
+    }
+};
+
 pub Program: ast::Program<'input> =
-    <statement_list:StatementList> => ast::Program {
+    <statement_list:SemiColonList<Statement>> => ast::Program {
         statement_list,
     };
 
 Statement: ast::Statement<'input> = {
-    <expression:Expression> ";"? => ast::Statement::ExpressionStatement(expression),
+    "let" <identifier:VariableIdentifier> ":" <variable_type:VariableType> => ast::Statement::DefinitionStatement { identifier, variable_type, is_const: false },
+    "const" <identifier:VariableIdentifier> ":" <variable_type:VariableType> => ast::Statement::DefinitionStatement { identifier, variable_type, is_const: true },
+    <expression:Expression> => ast::Statement::ExpressionStatement { expression },
 };
-
-StatementList =
-    Statement*;
 
 Expression: ast::Expression<'input> = {
-    <identifier:Identifier> => ast::Expression::AssignmentExpression { identifier },
+    <value:Value> => ast::Expression::ValueExpression { value },
+    <identifier:VariableIdentifier> => ast::Expression::VariableExpression { identifier },
+    <identifier:VariableIdentifier> "=" <expression:Expression> => ast::Expression::AssignmentExpression { identifier, expression: Box::new(expression) },
 };
 
-Identifier: ast::Identifier<'input> =
-    <name:r"[a-zA-Z0-9]+"> => ast::Identifier {
+VariableType: ast::VariableType = {
+    "string" => ast::VariableType::String,
+    "number" => ast::VariableType::Number,
+};
+
+VariableIdentifier: ast::VariableIdentifier<'input> =
+    <name:r"[a-zA-Z][a-zA-Z0-9]*"> => ast::VariableIdentifier {
         name,
     };
+
+Value: ast::Value<'input> = {
+    <value:r"[0-9]+"> => ast::Value::Integer(u64::from_str(<>).unwrap()),
+    <value:r"[0-9]+\.[0-9]+"> => ast::Value::Float(f64::from_str(<>).unwrap()),
+    <value:r"'[^\n\r]*'"> => ast::Value::String(&<>[1..<>.len()-1]),
+}
