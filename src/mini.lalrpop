@@ -1,0 +1,37 @@
+#[LALR]
+
+grammar;
+
+match {
+    ",",
+    ".",
+    r"[a-zA-Z0-9]+",
+
+    // Skip whitespace and comments
+    r"\s*" => { },
+    r"//[^\n\r]*[\n\r]*" => { }, // `// comment`
+    r"/\*([^\*]*\*+[^\*/])*([^\*]*\*+|[^\*])*\*/" => { }, // `/* comment */`
+}
+
+use crate::ast;
+
+List<T>: Vec<T> = {
+    <items: (<T> ",")*> <last: T?> => {
+        let mut items = items;
+        items.extend(last);
+        items
+    }
+};
+
+pub Program: ast::Program =
+    <identifier_list:IdentifierList> => ast::Program {
+        identifier_list,
+    };
+
+IdentifierList =
+    List<Identifier>;
+
+Identifier: ast::Identifier =
+    <name:r"[a-zA-Z0-9]+"> => ast::Identifier {
+        name: name.to_string(),
+    };

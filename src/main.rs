@@ -1,3 +1,5 @@
+use mini::cli;
+
 fn main() {
-    println!("Hello, world from main!");
+    cli::run();
 }

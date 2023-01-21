@@ -5,13 +5,14 @@ edition = "2021"
 build = "build.rs"
 
 [dependencies]
-clap = "4.1.1"
-lalrpop-util = "0.19.8"
-logos = "0.12.1"
-regex = "1"
+clap = { version = "4.1.1" }
+colored = { version = "2.0.0"}
+lalrpop-util = { version = "0.19.8", features = ["lexer"] }
+logos = { version = "0.12.1" }
+regex = { version = "1" }
 
 [build-dependencies]
-lalrpop = "0.19.8"
+lalrpop = { version = "0.19.8", features = ["lexer"] }
 
 [workspace]
 members = ["library"]
