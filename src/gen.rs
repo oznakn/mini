@@ -21,19 +21,19 @@ pub struct IRGenerator<'input> {
     pub ctx: Context,
 }
 
+fn new_variable() -> Variable {
+    static VARIABLE_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    Variable::new(VARIABLE_COUNTER.fetch_add(1, Ordering::Relaxed))
+}
+
+fn new_function_index() -> usize {
+    static FUNCTION_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    FUNCTION_COUNTER.fetch_add(1, Ordering::Relaxed)
+}
+
 impl<'input> IRGenerator<'input> {
-    fn new_variable() -> Variable {
-        static VARIABLE_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-        Variable::new(VARIABLE_COUNTER.fetch_add(1, Ordering::Relaxed))
-    }
-
-    fn new_function_index() -> usize {
-        static FUNCTION_COUNTER: AtomicUsize = AtomicUsize::new(0);
-
-        FUNCTION_COUNTER.fetch_add(1, Ordering::Relaxed)
-    }
-
     pub fn new(
         symbol_table: &'input st::SymbolTable<'input>,
         arch: &str,
@@ -59,82 +59,6 @@ impl<'input> IRGenerator<'input> {
             ctx: Context::new(),
             builder_context: FunctionBuilderContext::new(),
         })
-    }
-
-    fn build_expression(
-        bcx: &mut FunctionBuilder,
-        expression: &'input ast::Expression<'input>,
-    ) -> Result<Variable, CompilerError<'input>> {
-        match expression {
-            ast::Expression::ConstantExpression { value, .. } => match value {
-                value::Constant::Integer(i) => {
-                    let v = IRGenerator::new_variable();
-
-                    bcx.declare_var(v, types::I64);
-
-                    let tmp = bcx.ins().iconst(types::I64, *i);
-                    bcx.def_var(v, tmp);
-
-                    Ok(v)
-                }
-                _ => unimplemented!(),
-            },
-            _ => {
-                let v = IRGenerator::new_variable();
-
-                bcx.declare_var(v, types::I64);
-
-                let tmp = bcx.ins().iconst(types::I64, 0);
-                bcx.def_var(v, tmp);
-
-                Ok(v)
-            }
-        }
-    }
-
-    fn put_return(
-        bcx: &mut FunctionBuilder,
-        expression: Option<&'input ast::Expression<'input>>,
-    ) -> Result<(), CompilerError<'input>> {
-        {
-            if let Some(expression) = expression {
-                let v = Self::build_expression(bcx, expression)?;
-
-                let r = bcx.use_var(v);
-
-                bcx.ins().return_(&[r]);
-            } else {
-                bcx.ins().return_(&[]);
-            }
-        }
-
-        Ok(())
-    }
-
-    fn visit_statement(
-        bcx: &mut FunctionBuilder,
-        statement: &'input ast::Statement<'input>,
-    ) -> Result<(), CompilerError<'input>> {
-        match statement {
-            ast::Statement::ReturnStatement { expression, .. } => {
-                Self::put_return(bcx, expression.as_ref())?;
-            }
-
-            _ => {}
-        }
-
-        Ok(())
-    }
-
-    fn visit_statements(
-        bcx: &mut FunctionBuilder,
-        scope: &'input st::Scope<'input>,
-    ) -> Result<(), CompilerError<'input>> {
-        for statement in scope.statements.iter() {
-            Self::visit_statement(bcx, statement)?;
-        }
-
-        Ok(())
     }
 
     fn init_function(
@@ -163,7 +87,7 @@ impl<'input> IRGenerator<'input> {
             .unwrap();
 
         self.ctx = Context::for_function(Function::with_name_signature(
-            UserFuncName::user(0, IRGenerator::new_function_index().try_into().unwrap()),
+            UserFuncName::user(0, new_function_index().try_into().unwrap()),
             signature,
         ));
 
@@ -173,7 +97,7 @@ impl<'input> IRGenerator<'input> {
         bcx.switch_to_block(main_block);
         bcx.seal_block(main_block);
 
-        Self::visit_statements(&mut bcx, scope)?;
+        visit_statements(&mut bcx, scope)?;
 
         bcx.seal_all_blocks();
         bcx.finalize();
@@ -196,4 +120,80 @@ impl<'input> IRGenerator<'input> {
 
         Ok(())
     }
+}
+
+fn build_expression<'input>(
+    bcx: &mut FunctionBuilder,
+    expression: &'input ast::Expression<'input>,
+) -> Result<Variable, CompilerError<'input>> {
+    match expression {
+        ast::Expression::ConstantExpression { value, .. } => match value {
+            value::Constant::Integer(i) => {
+                let v = new_variable();
+
+                bcx.declare_var(v, types::I64);
+
+                let tmp = bcx.ins().iconst(types::I64, *i);
+                bcx.def_var(v, tmp);
+
+                Ok(v)
+            }
+            _ => unimplemented!(),
+        },
+        _ => {
+            let v = new_variable();
+
+            bcx.declare_var(v, types::I64);
+
+            let tmp = bcx.ins().iconst(types::I64, 0);
+            bcx.def_var(v, tmp);
+
+            Ok(v)
+        }
+    }
+}
+
+fn put_return<'input>(
+    bcx: &mut FunctionBuilder,
+    expression: Option<&'input ast::Expression<'input>>,
+) -> Result<(), CompilerError<'input>> {
+    {
+        if let Some(expression) = expression {
+            let v = build_expression(bcx, expression)?;
+
+            let r = bcx.use_var(v);
+
+            bcx.ins().return_(&[r]);
+        } else {
+            bcx.ins().return_(&[]);
+        }
+    }
+
+    Ok(())
+}
+
+fn visit_statement<'input>(
+    bcx: &mut FunctionBuilder,
+    statement: &'input ast::Statement<'input>,
+) -> Result<(), CompilerError<'input>> {
+    match statement {
+        ast::Statement::ReturnStatement { expression, .. } => {
+            put_return(bcx, expression.as_ref())?;
+        }
+
+        _ => {}
+    }
+
+    Ok(())
+}
+
+fn visit_statements<'input>(
+    bcx: &mut FunctionBuilder,
+    scope: &'input st::Scope<'input>,
+) -> Result<(), CompilerError<'input>> {
+    for statement in scope.statements.iter() {
+        visit_statement(bcx, statement)?;
+    }
+
+    Ok(())
 }
