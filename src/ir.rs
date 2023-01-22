@@ -8,7 +8,7 @@ use crate::value::*;
 impl VariableKind {
     pub fn get_abi(&self) -> Option<AbiParam> {
         match self {
-            VariableKind::Number => Some(AbiParam::new(types::I32)),
+            VariableKind::Number => Some(AbiParam::new(types::I64)),
             _ => None,
         }
     }

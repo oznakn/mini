@@ -29,7 +29,8 @@ pub enum ScopeKind {
 pub struct Scope<'input> {
     pub id: NodeId,
     pub parent: Option<NodeId>,
-    pub kind: ScopeKind,
+
+    pub definition: Option<&'input ast::VariableDefinition<'input>>,
 
     pub statements: &'input Vec<ast::Statement<'input>>,
 
@@ -54,7 +55,7 @@ impl<'input> SymbolTable<'input> {
             scope_arena: Vec::new(),
             variable_arena: Vec::new(),
         };
-        symbol_table.new_scope(ScopeKind::Global, &program.statements)?; // will register global scope with id 0
+        symbol_table.new_scope(None, &program.statements)?; // will register global scope with id 0
 
         symbol_table.build_variable_fields()?;
         symbol_table.build_types()?;
@@ -75,14 +76,14 @@ impl<'input> SymbolTable<'input> {
 impl<'input> SymbolTable<'input> {
     fn new_scope(
         &mut self,
-        kind: ScopeKind,
+        definition: Option<&'input ast::VariableDefinition<'input>>,
         statements: &'input Vec<ast::Statement<'input>>,
     ) -> Result<NodeId, CompilerError<'input>> {
         let scope_id = self.scope_arena.len();
         self.scope_arena.push(Scope {
             id: scope_id,
-            kind,
             parent: None,
+            definition,
             statements,
             scopes: Vec::new(),
             variables: IndexMap::new(),
@@ -148,7 +149,7 @@ impl<'input> SymbolTable<'input> {
                 } => {
                     self.add_variable(scope_id, &definition)?;
 
-                    let new_scope_id = self.new_scope(ScopeKind::Function, statements)?;
+                    let new_scope_id = self.new_scope(Some(definition), statements)?;
                     for parameter in parameters {
                         self.add_variable(new_scope_id, parameter)?;
                     }
@@ -244,6 +245,12 @@ impl<'input> SymbolTable<'input> {
         match statement {
             ast::Statement::ExpressionStatement { expression } => {
                 self.build_variable_fields_for_expression(scope_id, expression)?;
+            }
+
+            ast::Statement::ReturnStatement { expression, .. } => {
+                if let Some(expression) = expression {
+                    self.build_variable_fields_for_expression(scope_id, expression)?;
+                }
             }
 
             ast::Statement::DefinitionStatement {
@@ -363,6 +370,8 @@ impl<'input> SymbolTable<'input> {
                     }
                 }
             }
+
+            ast::Expression::Empty => unimplemented!(),
         }
     }
 

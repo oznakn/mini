@@ -1,3 +1,1 @@
-function x(): number {
-
-}
+return 3;

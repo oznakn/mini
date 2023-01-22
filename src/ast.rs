@@ -73,6 +73,10 @@ pub enum Statement<'input> {
         parameters: Vec<VariableDefinition<'input>>,
         statements: Vec<Statement<'input>>,
     },
+    ReturnStatement {
+        location: (usize, usize),
+        expression: Option<Expression<'input>>,
+    },
     EmptyStatement,
 }
 
@@ -111,4 +115,5 @@ pub enum Expression<'input> {
         left: Box<Expression<'input>>,
         right: Box<Expression<'input>>,
     },
+    Empty,
 }

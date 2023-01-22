@@ -42,6 +42,7 @@ match {
     "undefined",
     "null",
 
+    "return",
     "void",
     "function",
     "export",
@@ -82,6 +83,7 @@ Statement: ast::Statement<'input> = {
     ";" => ast::Statement::EmptyStatement,
     DefinitionStatement,
     FunctionStatement,
+    ReturnStatement,
 };
 
 FunctionReturnKind: ast::VariableKind = {
@@ -108,6 +110,13 @@ FunctionStatement: ast::Statement<'input> = {
         statements,
     },
 };
+
+ReturnStatement: ast::Statement<'input> = {
+    <l1:@L> "return" <e:Expression?> ";" <l2:@R> => ast::Statement::ReturnStatement {
+        location: (l1, l2),
+        expression: e,
+    }
+}
 
 DefinitionStatementPrefix = {
     "let",
@@ -268,7 +277,7 @@ String: ast::Constant<'input> = {
 };
 
 Number: ast::Constant<'input> = {
-    <value:r"[0-9]+"> => ast::Constant::Integer(u64::from_str(<>).unwrap()),
+    <value:r"[0-9]+"> => ast::Constant::Integer(i64::from_str(<>).unwrap()),
     <value:r"[0-9]+\.[0-9]+"> => ast::Constant::Float(f64::from_str(<>).unwrap()),
 }
 

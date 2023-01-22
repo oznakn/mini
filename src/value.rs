@@ -47,7 +47,7 @@ pub enum Constant<'input> {
     Undefined,
     Null,
     Boolean(bool),
-    Integer(u64),
+    Integer(i64),
     Float(f64),
     String(&'input str),
 }
