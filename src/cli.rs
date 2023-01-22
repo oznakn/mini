@@ -19,10 +19,15 @@ fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
         .map_err(|err| CompilerError::ParserError(err).to_string())?;
 
     let symbol_table = st::SymbolTable::from(&program).map_err(|err| err.to_string())?;
-    // dbg!(&symbol_table.variable_arena);
 
-    let mut ir_generator = gen::IRGenerator::new(&symbol_table, "aarch64-apple-darwin", "foo")
-        .map_err(|err| err.to_string())?;
+    let mut ir_generator = gen::IRGenerator::new(
+        &symbol_table,
+        "aarch64-apple-darwin",
+        "foo",
+        matches.is_present("optimize"),
+    )
+    .map_err(|err| err.to_string())?;
+
     ir_generator.init().map_err(|err| err.to_string())?;
 
     let result = ir_generator.module.finish();
@@ -43,6 +48,11 @@ pub fn run() {
                 .help("Sets the input file to use")
                 .required(true)
                 .index(1),
+        )
+        .arg(
+            Arg::with_name("optimize")
+                .long("optimize")
+                .help("Optimize output"),
         );
 
     let matches = app.get_matches();

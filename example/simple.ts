@@ -1,7 +1,7 @@
 function x(): number {
-    let a: number = 10;
-    a = a + 200;
-    return a + 2;
+    let a: number = 100;
+    a = a - 70;
+    return a * 3;
 }
 
 // const b = x();

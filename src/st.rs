@@ -338,18 +338,6 @@ impl<'input> SymbolTable<'input> {
                 Ok(variable.definition.kind.clone())
             }
 
-            ast::Expression::CommaExpression { expressions, .. } => {
-                if expressions.len() == 0 {
-                    return Ok(ast::VariableKind::Undefined);
-                }
-
-                for expression in expressions.iter().skip(1) {
-                    self.get_expression_kind(scope_id, expression)?;
-                }
-
-                self.get_expression_kind(scope_id, expressions.get(0).unwrap())
-            }
-
             ast::Expression::AssignmentExpression { expression, .. } => {
                 self.get_expression_kind(scope_id, expression)
             }

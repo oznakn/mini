@@ -1,7 +1,9 @@
 use cranelift_codegen::entity::EntityRef;
+use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::*;
 use cranelift_codegen::isa;
 use cranelift_codegen::settings;
+use cranelift_codegen::settings::Configurable;
 use cranelift_codegen::Context;
 use cranelift_frontend::*;
 use cranelift_module::*;
@@ -18,6 +20,7 @@ use crate::value;
 
 pub struct IRGenerator<'input> {
     pub isa: Box<dyn isa::TargetIsa>,
+    pub optimize: bool,
 
     pub symbol_table: &'input st::SymbolTable<'input>,
     pub module: ObjectModule,
@@ -50,11 +53,14 @@ impl<'input> IRGenerator<'input> {
         symbol_table: &'input st::SymbolTable<'input>,
         arch: &str,
         name: &str,
+        optimize: bool,
     ) -> Result<Self, CompilerError<'input>> {
-        let flag_builder = settings::builder();
-        // flag_builder
-        //     .set("opt_level", "speed")
-        //     .expect("set optlevel");
+        let mut flag_builder = settings::builder();
+        if optimize {
+            flag_builder
+                .set("opt_level", "speed")
+                .expect("set optlevel");
+        }
 
         let isa_builder = isa::lookup_by_name(arch)
             .map_err(|err| CompilerError::CodeGenError(err.to_string()))?;
@@ -76,6 +82,7 @@ impl<'input> IRGenerator<'input> {
             symbol_table,
             module,
             builder_context: FunctionBuilderContext::new(),
+            optimize,
         })
     }
 
@@ -109,11 +116,13 @@ impl<'input> IRGenerator<'input> {
             .map_err(|err| CompilerError::CodeGenError(err.to_string()))?;
         translator.bcx.finalize();
 
-        // ctx.optimize(self.isa.as_ref())
-        //     .map_err(|err| CompilerError::CodeGenError(err.to_string()))?;
+        if self.optimize {
+            ctx.optimize(self.isa.as_ref())
+                .map_err(|err| CompilerError::CodeGenError(err.to_string()))?;
 
-        // optimize(&mut ctx, self.isa.as_ref())
-        //     .map_err(|err| CompilerError::CodeGenError(err.to_string()))?;
+            optimize(&mut ctx, self.isa.as_ref())
+                .map_err(|err| CompilerError::CodeGenError(err.to_string()))?;
+        }
 
         self.module
             .define_function(func_id, &mut ctx)
@@ -192,27 +201,6 @@ impl<'input> FunctionTranslator<'input> {
                 Ok(self.bcx.use_var(v))
             }
 
-            ast::Expression::BinaryExpression {
-                operator,
-                left,
-                right,
-                ..
-            } => match operator {
-                ast::BinaryOperator::Addition => {
-                    let left = self.translate_expression(left)?;
-                    let right = self.translate_expression(right)?;
-
-                    let v = new_variable();
-                    self.bcx.declare_var(v, types::I64);
-
-                    let tmp = self.bcx.ins().iadd(left, right);
-                    self.bcx.def_var(v, tmp);
-
-                    Ok(self.bcx.use_var(v))
-                }
-                _ => unimplemented!(),
-            },
-
             ast::Expression::AssignmentExpression {
                 identifier,
                 expression,
@@ -226,11 +214,87 @@ impl<'input> FunctionTranslator<'input> {
                 Ok(self.bcx.use_var(v))
             }
 
-            _ => {
-                dbg!(&expression);
+            ast::Expression::BinaryExpression {
+                operator,
+                left,
+                right,
+                ..
+            } => {
+                let left = self.translate_expression(left)?;
+                let right = self.translate_expression(right)?;
 
-                unreachable!()
+                let v = new_variable();
+                self.bcx.declare_var(v, types::I64);
+
+                let result = match operator {
+                    ast::BinaryOperator::Addition => self.bcx.ins().iadd(left, right),
+                    ast::BinaryOperator::Subtraction => self.bcx.ins().isub(left, right),
+                    ast::BinaryOperator::Multiplication => self.bcx.ins().imul(left, right),
+                    ast::BinaryOperator::Equal => self.bcx.ins().icmp(IntCC::Equal, left, right),
+                    ast::BinaryOperator::NotEqual => {
+                        self.bcx.ins().icmp(IntCC::NotEqual, left, right)
+                    }
+                    ast::BinaryOperator::StrictEqual => {
+                        self.bcx.ins().icmp(IntCC::Equal, left, right)
+                    }
+                    ast::BinaryOperator::StrictNotEqual => {
+                        self.bcx.ins().icmp(IntCC::NotEqual, left, right)
+                    }
+                    ast::BinaryOperator::Less => {
+                        self.bcx.ins().icmp(IntCC::SignedLessThan, left, right)
+                    }
+                    ast::BinaryOperator::LessEqual => {
+                        self.bcx
+                            .ins()
+                            .icmp(IntCC::SignedLessThanOrEqual, left, right)
+                    }
+                    ast::BinaryOperator::Greater => {
+                        self.bcx.ins().icmp(IntCC::SignedGreaterThan, left, right)
+                    }
+                    ast::BinaryOperator::GreaterEqual => {
+                        self.bcx
+                            .ins()
+                            .icmp(IntCC::SignedGreaterThanOrEqual, left, right)
+                    }
+                    _ => unimplemented!(),
+                };
+
+                self.bcx.def_var(v, result);
+
+                Ok(self.bcx.use_var(v))
             }
+
+            ast::Expression::UnaryExpression {
+                operator,
+                expression,
+                ..
+            } => match operator {
+                ast::UnaryOperator::Positive => {
+                    let val = self.translate_expression(&expression)?;
+
+                    let v = new_variable();
+                    self.bcx.declare_var(v, types::I64);
+
+                    self.bcx.def_var(v, val);
+
+                    Ok(self.bcx.use_var(v))
+                }
+                ast::UnaryOperator::Negative => {
+                    let left = self.bcx.ins().iconst(types::I64, 0);
+                    let right = self.translate_expression(&expression)?;
+
+                    let v = new_variable();
+                    self.bcx.declare_var(v, types::I64);
+
+                    let tmp = self.bcx.ins().isub(left, right);
+                    self.bcx.def_var(v, tmp);
+
+                    Ok(self.bcx.use_var(v))
+                }
+                _ => unimplemented!(),
+            },
+
+            _ => unimplemented!(),
         }
     }
 

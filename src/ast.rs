@@ -95,10 +95,6 @@ pub enum Expression<'input> {
         identifier: VariableIdentifier<'input>,
         arguments: Vec<Expression<'input>>,
     },
-    CommaExpression {
-        location: (usize, usize),
-        expressions: Vec<Expression<'input>>,
-    },
     AssignmentExpression {
         location: (usize, usize),
         identifier: VariableIdentifier<'input>,
