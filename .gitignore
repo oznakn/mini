@@ -1,5 +1,7 @@
 target/
 .DS_Store
 
+*.o
+
 /library/example/*
 !/library/example/*.c

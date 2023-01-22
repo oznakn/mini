@@ -2,6 +2,7 @@ use clap::{App, Arg};
 use std::fs;
 
 use crate::error::CompilerError;
+use crate::gen;
 use crate::mini;
 use crate::st;
 
@@ -18,7 +19,15 @@ fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
         .map_err(|err| CompilerError::ParserError(err).to_string())?;
 
     let _symbol_table = st::SymbolTable::from(&content, &program).map_err(|err| err.to_string())?;
-    dbg!(&_symbol_table.variable_arena);
+    // dbg!(&_symbol_table.variable_arena);
+
+    let mut ir_generator =
+        gen::IRGenerator::new("aarch64-apple-darwin", "foo").map_err(|err| err.to_string())?;
+    ir_generator.start().unwrap();
+
+    let result = ir_generator.module.finish();
+    let object_code = result.emit().unwrap();
+    fs::write("foo.o", object_code).unwrap();
 
     Ok(())
 }

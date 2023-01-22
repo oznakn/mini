@@ -8,6 +8,7 @@ use crate::ast;
 pub enum CompilerError<'input> {
     CliError(&'input str),
     ParserError(ParseError<usize, Token<'input>, &'static str>),
+    CodeGenError(String),
     VariableAlreadyDefined(&'input str),
     VariableNotDefined(&'input str),
     InvalidFunctionCall(&'input str),
@@ -40,6 +41,7 @@ impl<'input> fmt::Display for CompilerError<'input> {
                 writeln!(f, "{}", s)
             }
             CompilerError::CliError(err) => write!(f, "{}: {}", "error:".red(), err),
+            CompilerError::CodeGenError(err) => write!(f, "{}: {}", "error:".red(), err),
             CompilerError::VariableAlreadyDefined(v) => {
                 write!(
                     f,

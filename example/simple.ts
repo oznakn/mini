@@ -9,5 +9,4 @@
 let x = null;
 const a = 10;
 const b = 20;
-b = 30;
 (a + b);
