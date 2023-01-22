@@ -41,22 +41,16 @@ pub struct Scope<'input> {
 pub struct SymbolTable<'input> {
     pub global: NodeId,
 
-    pub content: &'input str,
-    pub program: &'input ast::Program<'input>,
-
     pub scope_arena: Vec<Scope<'input>>,
     pub variable_arena: Vec<Variable<'input>>,
 }
 
 impl<'input> SymbolTable<'input> {
     pub fn from(
-        content: &'input str,
         program: &'input ast::Program<'input>,
     ) -> Result<SymbolTable<'input>, CompilerError<'input>> {
         let mut symbol_table = SymbolTable {
             global: 0,
-            content,
-            program,
             scope_arena: Vec::new(),
             variable_arena: Vec::new(),
         };
@@ -68,10 +62,18 @@ impl<'input> SymbolTable<'input> {
 
         Ok(symbol_table)
     }
+
+    pub fn scope(&self, scope_id: NodeId) -> &Scope<'input> {
+        &self.scope_arena.get(scope_id).unwrap()
+    }
+
+    pub fn variable(&self, variable_id: NodeId) -> &Variable<'input> {
+        &self.variable_arena.get(variable_id).unwrap()
+    }
 }
 
 impl<'input> SymbolTable<'input> {
-    pub fn new_scope(
+    fn new_scope(
         &mut self,
         kind: ScopeKind,
         statements: &'input Vec<ast::Statement<'input>>,
@@ -166,7 +168,7 @@ impl<'input> SymbolTable<'input> {
 }
 
 impl<'input> SymbolTable<'input> {
-    pub fn get_variable(
+    fn fetch_variable_by_name(
         &self,
         scope_id: NodeId,
         name: &'input str,
@@ -178,20 +180,20 @@ impl<'input> SymbolTable<'input> {
         }
 
         if let Some(parent) = scope.parent {
-            return self.get_variable(parent, name);
+            return self.fetch_variable_by_name(parent, name);
         }
 
         Err(CompilerError::VariableNotDefined(name))
     }
 
-    pub fn get_variable_identifier(
+    fn fetch_variable_by_identifier(
         &self,
         scope_id: NodeId,
         identifier: &'input ast::VariableIdentifier<'input>,
     ) -> Result<NodeId, CompilerError<'input>> {
         match identifier {
             ast::VariableIdentifier::Identifier { identifier, .. } => {
-                self.get_variable(scope_id, identifier)
+                self.fetch_variable_by_name(scope_id, identifier)
             }
             _ => unimplemented!(),
         }
@@ -206,7 +208,7 @@ impl<'input> SymbolTable<'input> {
     ) -> Result<(), CompilerError<'input>> {
         match expression {
             ast::Expression::AssignmentExpression { identifier, .. } => {
-                let variable_id = self.get_variable_identifier(scope_id, identifier)?;
+                let variable_id = self.fetch_variable_by_identifier(scope_id, identifier)?;
                 let variable = self.variable_arena.get_mut(variable_id).unwrap();
 
                 if variable.definition.is_writable == false {
@@ -223,7 +225,7 @@ impl<'input> SymbolTable<'input> {
                 arguments,
                 ..
             } => {
-                let variable_id = self.get_variable_identifier(scope_id, identifier)?;
+                let variable_id = self.fetch_variable_by_identifier(scope_id, identifier)?;
                 let variable = self.variable_arena.get_mut(variable_id).unwrap();
 
                 variable.calls.push(arguments);
@@ -249,7 +251,7 @@ impl<'input> SymbolTable<'input> {
                 expression,
                 ..
             } => {
-                let variable_id = self.get_variable(scope_id, definition.identifier)?;
+                let variable_id = self.fetch_variable_by_name(scope_id, definition.identifier)?;
                 let variable = self.variable_arena.get_mut(variable_id).unwrap();
 
                 if let Some(expression) = expression {
@@ -278,7 +280,7 @@ impl<'input> SymbolTable<'input> {
         Ok(())
     }
 
-    pub fn build_variable_fields(&mut self) -> Result<(), CompilerError<'input>> {
+    fn build_variable_fields(&mut self) -> Result<(), CompilerError<'input>> {
         let scopes = self.scope_arena.iter().map(|v| v.id).collect::<Vec<_>>();
 
         for scope_id in scopes {
@@ -290,7 +292,7 @@ impl<'input> SymbolTable<'input> {
 }
 
 impl<'input> SymbolTable<'input> {
-    pub fn get_expression_kind(
+    fn get_expression_kind(
         &self,
         scope_id: NodeId,
         expression: &'input ast::Expression<'input>,
@@ -299,7 +301,7 @@ impl<'input> SymbolTable<'input> {
             ast::Expression::ConstantExpression { value, .. } => Ok(value.get_kind()),
 
             ast::Expression::VariableExpression { identifier, .. } => {
-                let variable_id = self.get_variable_identifier(scope_id, identifier)?;
+                let variable_id = self.fetch_variable_by_identifier(scope_id, identifier)?;
                 let variable = self.variable_arena.get(variable_id).unwrap();
 
                 if let Some(kind) = &variable.kind {
@@ -347,7 +349,7 @@ impl<'input> SymbolTable<'input> {
                     self.get_expression_kind(scope_id, argument)?;
                 }
 
-                let variable_id = self.get_variable_identifier(scope_id, identifier)?;
+                let variable_id = self.fetch_variable_by_identifier(scope_id, identifier)?;
                 let variable = self.variable_arena.get(variable_id).unwrap();
 
                 match variable.kind.as_ref().unwrap() {
@@ -416,7 +418,7 @@ impl<'input> SymbolTable<'input> {
         Ok(())
     }
 
-    pub fn build_types(&mut self) -> Result<(), CompilerError<'input>> {
+    fn build_types(&mut self) -> Result<(), CompilerError<'input>> {
         let variables = self.variable_arena.iter().map(|v| v.id).collect::<Vec<_>>();
 
         for variable_id in variables {
@@ -476,7 +478,7 @@ impl<'input> SymbolTable<'input> {
         Ok(())
     }
 
-    pub fn check_types(&self) -> Result<(), CompilerError<'input>> {
+    fn check_types(&self) -> Result<(), CompilerError<'input>> {
         let variables = self.variable_arena.iter().map(|v| v.id).collect::<Vec<_>>();
 
         for variable_id in variables {
