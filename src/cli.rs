@@ -37,7 +37,6 @@ pub fn run() {
         );
 
     let matches = app.get_matches();
-
     if let Err(err) = compile(&matches) {
         println!("{}", err);
     }

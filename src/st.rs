@@ -1,4 +1,4 @@
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
 
 use crate::ast;
 use crate::error::CompilerError;
@@ -11,7 +11,7 @@ pub struct Variable<'input> {
     pub scope: NodeId,
 
     pub name: &'input str,
-    pub kinds: IndexSet<ast::VariableKind>,
+    pub kind: Option<ast::VariableKind>,
 
     pub definition: &'input ast::VariableDefinition<'input>,
     pub assignments: Vec<&'input ast::Expression<'input>>,
@@ -52,7 +52,7 @@ impl<'input> SymbolTable<'input> {
             scope_arena: Vec::new(),
             variable_arena: Vec::new(),
         };
-        symbol_table.new_scope(&program.statements)?;
+        symbol_table.new_scope(&program.statements)?; // will register global scope with id 0
 
         symbol_table.build_variable_fields()?;
         symbol_table.build_types()?;
@@ -110,8 +110,8 @@ impl<'input> SymbolTable<'input> {
             id: variable_entry,
             scope,
             name: definition.identifier,
+            kind: None,
             definition,
-            kinds: IndexSet::new(),
             assignments: Vec::new(),
             calls: Vec::new(),
         });
@@ -183,80 +183,6 @@ impl<'input> SymbolTable<'input> {
                 self.get_variable(scope, identifier)
             }
             _ => unimplemented!(),
-        }
-    }
-
-    pub fn get_expression_kind(
-        &self,
-        scope: NodeId,
-        expression: &'input ast::Expression<'input>,
-    ) -> Result<ast::VariableKind, CompilerError<'input>> {
-        match expression {
-            ast::Expression::ConstantExpression { value, .. } => Ok(value.get_kind()),
-
-            ast::Expression::VariableExpression { identifier, .. } => {
-                let variable = self.get_variable_identifier(scope, identifier)?;
-                let variable_obj = self.variable_arena.get(variable).unwrap();
-
-                if let Some(kind) = &variable_obj.definition.kind {
-                    return Ok(kind.clone());
-                }
-
-                Err(CompilerError::VariableTypeCannotBeInfered(
-                    variable_obj.definition.identifier,
-                ))
-            }
-
-            ast::Expression::CommaExpression { expressions, .. } => {
-                if expressions.len() == 0 {
-                    return Ok(ast::VariableKind::Undefined);
-                }
-
-                for expression in expressions.iter().skip(1) {
-                    self.get_expression_kind(scope, expression)?;
-                }
-
-                self.get_expression_kind(scope, expressions.get(0).unwrap())
-            }
-
-            ast::Expression::AssignmentExpression { expression, .. } => {
-                self.get_expression_kind(scope, expression)
-            }
-
-            ast::Expression::BinaryExpression { left, right, .. } => {
-                let left_kind = self.get_expression_kind(scope, left)?;
-                let right_kind = self.get_expression_kind(scope, right)?;
-
-                Ok(left_kind.operation_result(&right_kind))
-            }
-
-            ast::Expression::UnaryExpression { expression, .. } => {
-                self.get_expression_kind(scope, &expression)
-            }
-
-            ast::Expression::CallExpression {
-                identifier,
-                arguments,
-                ..
-            } => {
-                for argument in arguments {
-                    self.get_expression_kind(scope, argument)?;
-                }
-
-                let variable = self.get_variable_identifier(scope, identifier)?;
-                let variable_obj = self.variable_arena.get(variable).unwrap();
-
-                match variable_obj.definition.kind.as_ref().unwrap() {
-                    ast::VariableKind::Function { return_kind, .. } => {
-                        Ok(return_kind.as_ref().to_owned())
-                    }
-                    _ => {
-                        return Err(CompilerError::InvalidFunctionCall(
-                            variable_obj.definition.identifier,
-                        ))
-                    }
-                }
-            }
         }
     }
 }
@@ -353,10 +279,85 @@ impl<'input> SymbolTable<'input> {
 }
 
 impl<'input> SymbolTable<'input> {
-    fn get_kinds_from_assignments(
+    pub fn get_expression_kind(
+        &self,
+        scope: NodeId,
+        expression: &'input ast::Expression<'input>,
+    ) -> Result<ast::VariableKind, CompilerError<'input>> {
+        match expression {
+            ast::Expression::ConstantExpression { value, .. } => Ok(value.get_kind()),
+
+            ast::Expression::VariableExpression { identifier, .. } => {
+                let variable = self.get_variable_identifier(scope, identifier)?;
+                let variable_obj = self.variable_arena.get(variable).unwrap();
+
+                if let Some(kind) = &variable_obj.kind {
+                    return Ok(kind.clone());
+                }
+
+                Err(CompilerError::VariableTypeCannotBeInfered(
+                    variable_obj.definition.identifier,
+                ))
+            }
+
+            ast::Expression::CommaExpression { expressions, .. } => {
+                if expressions.len() == 0 {
+                    return Ok(ast::VariableKind::Undefined);
+                }
+
+                for expression in expressions.iter().skip(1) {
+                    self.get_expression_kind(scope, expression)?;
+                }
+
+                self.get_expression_kind(scope, expressions.get(0).unwrap())
+            }
+
+            ast::Expression::AssignmentExpression { expression, .. } => {
+                self.get_expression_kind(scope, expression)
+            }
+
+            ast::Expression::BinaryExpression { left, right, .. } => {
+                let left_kind = self.get_expression_kind(scope, left)?;
+                let right_kind = self.get_expression_kind(scope, right)?;
+
+                Ok(left_kind.operation_result(&right_kind))
+            }
+
+            ast::Expression::UnaryExpression { expression, .. } => {
+                self.get_expression_kind(scope, &expression)
+            }
+
+            ast::Expression::CallExpression {
+                identifier,
+                arguments,
+                ..
+            } => {
+                for argument in arguments {
+                    self.get_expression_kind(scope, argument)?;
+                }
+
+                let variable = self.get_variable_identifier(scope, identifier)?;
+                let variable_obj = self.variable_arena.get(variable).unwrap();
+
+                match variable_obj.kind.as_ref().unwrap() {
+                    ast::VariableKind::Function { return_kind, .. } => {
+                        Ok(return_kind.as_ref().to_owned())
+                    }
+                    _ => {
+                        return Err(CompilerError::InvalidFunctionCall(
+                            variable_obj.definition.identifier,
+                        ))
+                    }
+                }
+            }
+        }
+    }
+
+    fn get_kind_from_assignments(
         &self,
         variable: NodeId,
-    ) -> Result<Vec<ast::VariableKind>, CompilerError<'input>> {
+        base_kind: Option<ast::VariableKind>,
+    ) -> Result<ast::VariableKind, CompilerError<'input>> {
         let variable_obj = self.variable_arena.get(variable).unwrap();
 
         let kind_results = variable_obj
@@ -365,25 +366,38 @@ impl<'input> SymbolTable<'input> {
             .map(|a| self.get_expression_kind(variable_obj.scope, a))
             .collect::<Vec<_>>();
 
-        let mut kinds = Vec::new();
-        for kind in kind_results {
-            kinds.push(kind?);
+        if base_kind.is_none()
+            && (kind_results.is_empty() || kind_results.first().unwrap().is_err())
+        {
+            return Err(CompilerError::VariableTypeCannotBeInfered(
+                variable_obj.definition.identifier,
+            ));
         }
 
-        Ok(kinds)
+        let first_kind = base_kind
+            .or_else(|| Some(kind_results.first().unwrap().clone().unwrap()))
+            .unwrap();
+
+        for kind in kind_results {
+            let kind = kind?;
+            if kind != first_kind {
+                return Err(CompilerError::InvalidAssignment(
+                    variable_obj.definition.identifier,
+                    first_kind,
+                    kind,
+                ));
+            }
+        }
+
+        Ok(first_kind)
     }
 
     fn build_types_for_variable(&mut self, variable: NodeId) -> Result<(), CompilerError<'input>> {
-        let kinds = self.get_kinds_from_assignments(variable)?;
+        let variable_obj = self.variable_arena.get(variable).unwrap();
+        let kind = self.get_kind_from_assignments(variable, variable_obj.kind.clone())?;
 
         let variable_obj = self.variable_arena.get_mut(variable).unwrap();
-        if let Some(kind) = &variable_obj.definition.kind {
-            variable_obj.kinds.insert(kind.clone());
-        } else {
-            for kind in kinds {
-                variable_obj.kinds.insert(kind);
-            }
-        }
+        variable_obj.kind = Some(kind);
 
         Ok(())
     }
@@ -404,25 +418,23 @@ impl<'input> SymbolTable<'input> {
         let variable_obj = self.variable_arena.get(variable).unwrap();
 
         if variable_obj.calls.len() > 0 {
-            let fn_kind_length = variable_obj
-                .kinds
-                .iter()
-                .filter(|k| match k {
+            let is_kind_fn = variable_obj.kind.as_ref().map_or_else(
+                || false,
+                |k| match k {
                     ast::VariableKind::Function { .. } => true,
                     _ => false,
-                })
-                .collect::<Vec<_>>()
-                .len();
+                },
+            );
 
-            if fn_kind_length == 0 {
+            if !is_kind_fn {
                 return Err(CompilerError::InvalidFunctionCall(
                     variable_obj.definition.identifier,
                 ));
             }
-        }
 
-        for kind in &variable_obj.kinds {
-            if let ast::VariableKind::Function { parameters, .. } = kind {
+            if let ast::VariableKind::Function { parameters, .. } =
+                variable_obj.kind.as_ref().unwrap()
+            {
                 for arguments in &variable_obj.calls {
                     if arguments.len() != parameters.len() {
                         return Err(CompilerError::InvalidNumberOfArguments(
