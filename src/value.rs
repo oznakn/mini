@@ -41,7 +41,7 @@ impl VariableKind {
 }
 
 #[derive(Clone, Debug)]
-pub enum Value<'input> {
+pub enum Constant<'input> {
     Undefined,
     Null,
     Boolean(bool),
@@ -50,15 +50,15 @@ pub enum Value<'input> {
     String(&'input str),
 }
 
-impl<'input> Value<'input> {
+impl<'input> Constant<'input> {
     pub fn get_kind(&self) -> VariableKind {
         match self {
-            Value::Undefined => VariableKind::Undefined,
-            Value::Null => VariableKind::Null,
-            Value::Boolean(_) => VariableKind::Boolean,
-            Value::Integer(_) => VariableKind::Number,
-            Value::Float(_) => VariableKind::Number,
-            Value::String(_) => VariableKind::String,
+            Constant::Undefined => VariableKind::Undefined,
+            Constant::Null => VariableKind::Null,
+            Constant::Boolean(_) => VariableKind::Boolean,
+            Constant::Integer(_) => VariableKind::Number,
+            Constant::Float(_) => VariableKind::Number,
+            Constant::String(_) => VariableKind::String,
         }
     }
 }

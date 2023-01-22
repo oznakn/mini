@@ -1,7 +1,2 @@
-// import fs from 'fs';
-
-function y(a: number, b: number) {
-
-}
-const a = 5;
-y(1, 2);
+// 15;
+1 + 2 * 4 && 3 + 4 * 5 || 6 + 7 * 8 && 3;

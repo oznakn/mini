@@ -26,7 +26,6 @@ match {
     ">=",
     "&&",
     "||",
-    "^^",
     "{",
     "}",
     "(",
@@ -85,42 +84,17 @@ Statement: ast::Statement<'input> = {
     FunctionStatement,
 };
 
+FunctionReturnKind: ast::VariableKind = {
+    "void" => ast::VariableKind::Undefined,
+    <kind:VariableKind> => kind,
+};
+
 FunctionStatement: ast::Statement<'input> = {
-    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" <statements:Body> => ast::Statement::FunctionStatement {
+    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" <return_kind:(":" <FunctionReturnKind>)?> <statements:Body> => ast::Statement::FunctionStatement {
         variable: ast::VariableDefinition {
             identifier,
             kind: Some(ast::VariableKind::Function {
-                return_kind: Box::new(ast::VariableKind::Undefined),
-                parameters: parameters
-                            .iter()
-                            .map(|parameter| parameter.kind.as_ref().unwrap().clone())
-                            .collect(),
-            }),
-            is_writable: false,
-        },
-        parameters,
-        statements,
-    },
-    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" ":" "void" <statements:Body> => ast::Statement::FunctionStatement {
-        variable: ast::VariableDefinition {
-            identifier,
-            kind: Some(ast::VariableKind::Function {
-                return_kind: Box::new(ast::VariableKind::Undefined),
-                parameters: parameters
-                            .iter()
-                            .map(|parameter| parameter.kind.as_ref().unwrap().clone())
-                            .collect(),
-            }),
-            is_writable: false,
-        },
-        parameters,
-        statements,
-    },
-    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" ":" <return_kind:VariableKind> <statements:Body> => ast::Statement::FunctionStatement {
-        variable: ast::VariableDefinition {
-            identifier,
-            kind: Some(ast::VariableKind::Function {
-                return_kind: Box::new(return_kind),
+                return_kind: Box::new(return_kind.or_else(|| Some(ast::VariableKind::Undefined)).unwrap()),
                 parameters: parameters
                             .iter()
                             .map(|parameter| parameter.kind.as_ref().unwrap().clone())
@@ -133,38 +107,26 @@ FunctionStatement: ast::Statement<'input> = {
     },
 };
 
+DefinitionStatementPrefix = {
+    "let",
+    "const",
+};
+
 DefinitionStatement: ast::Statement<'input> = {
-    "let" <definition:VariableDefinitionOptionalKind> ";" => ast::Statement::DefinitionStatement {
-        variable: definition,
-        expression: None,
-    },
-    "let" <definition:VariableDefinitionOptionalKind> "=" <e:Expression> ";" => ast::Statement::DefinitionStatement {
-        variable: definition,
-        expression: Some(e),
-    },
-    "const" <definition:VariableDefinitionOptionalKind> ";" => {
+    <prefix:DefinitionStatementPrefix> <definition:VariableDefinitionOptionalKind> <e:("=" <Expression>)?> ";" => {
         let mut definition = definition;
-        definition.is_writable = false;
+        definition.is_writable = prefix == "let";
 
         ast::Statement::DefinitionStatement {
             variable: definition,
-            expression: None,
-        }
-    },
-    "const" <definition:VariableDefinitionOptionalKind> "=" <e:Expression> ";" => {
-        let mut definition = definition;
-        definition.is_writable = false;
-
-        ast::Statement::DefinitionStatement {
-            variable: definition,
-            expression: Some(e),
+            expression: e,
         }
     },
 }
 
 Expression: ast::Expression<'input> = {
     AssignmentExpression,
-    LogicalTerm,
+    BinaryExpression,
 };
 
 AssignmentExpression: ast::Expression<'input> =
@@ -173,39 +135,30 @@ AssignmentExpression: ast::Expression<'input> =
         expression: Box::new(e),
     };
 
-LogicalTerm: ast::Expression<'input> = {
-    <left:LogicalTerm> <operator:LogicalOperator> <right:AddTerm> => ast::Expression::BinaryExpression {
+Term<L, O, R>: ast::Expression<'input> = {
+    <left:L> <operator:O> <right:R> => ast::Expression::BinaryExpression {
         left: Box::new(left),
         operator,
         right: Box::new(right),
     },
-    AddTerm,
+    R,
 };
 
-AddTerm: ast::Expression<'input> = {
-    <left:AddTerm> <operator:AddOperator> <right:MulTerm> => ast::Expression::BinaryExpression {
-        left: Box::new(left),
-        operator,
-        right: Box::new(right),
-    },
-    MulTerm,
-};
+BinaryExpression = LogicalTerm4;
 
-MulTerm: ast::Expression<'input> = {
-    <left:MulTerm> <operator:MulOperator> <right:Factor> => ast::Expression::BinaryExpression {
-        left: Box::new(left),
-        operator,
-        right: Box::new(right),
-    },
-    Factor,
-};
+LogicalTerm4 = Term<LogicalTerm4, LogicalOperator4, LogicalTerm3>;
+LogicalTerm3 = Term<LogicalTerm3, LogicalOperator3, LogicalTerm2>;
+LogicalTerm2 = Term<LogicalTerm2, LogicalOperator2, LogicalTerm1>;
+LogicalTerm1 = Term<LogicalTerm1, LogicalOperator1, AddTerm>;
+AddTerm = Term<AddTerm, AddOperator, MulTerm>;
+MulTerm = Term<MulTerm, MulOperator, Factor>;
 
 Factor: ast::Expression<'input> = {
     <operator:UnaryOperator> <e:Factor> => ast::Expression::UnaryExpression {
         operator,
         expression: Box::new(e),
     },
-    <value:Value> => ast::Expression::ValueExpression { value },
+    <l1:@L> <value:Constant> <l2:@R> => ast::Expression::ConstantExpression { location: (l1, l2), value },
     <identifier:VariableIdentifier> => ast::Expression::VariableExpression { identifier },
     <identifier:VariableIdentifier> "(" <arguments:CommaList<Expression>> ")" => ast::Expression::CallExpression { identifier, arguments },
     "(" <e:Expression> ")" => e,
@@ -228,18 +181,26 @@ MulOperator: ast::BinaryOperator = {
     "%" => ast::BinaryOperator::Mod,
 };
 
-LogicalOperator: ast::BinaryOperator = {
-    "==" => ast::BinaryOperator::Equal,
-    "===" => ast::BinaryOperator::StrictEqual,
-    "!=" => ast::BinaryOperator::NotEqual,
-    "!==" => ast::BinaryOperator::StrictNotEqual,
+LogicalOperator1: ast::BinaryOperator = {
     "<" => ast::BinaryOperator::Less,
     "<=" => ast::BinaryOperator::LessEqual,
     ">" => ast::BinaryOperator::Greater,
     ">=" => ast::BinaryOperator::GreaterEqual,
+};
+
+LogicalOperator2: ast::BinaryOperator = {
+    "==" => ast::BinaryOperator::Equal,
+    "===" => ast::BinaryOperator::StrictEqual,
+    "!=" => ast::BinaryOperator::NotEqual,
+    "!==" => ast::BinaryOperator::StrictNotEqual,
+};
+
+LogicalOperator3: ast::BinaryOperator = {
     "&&" => ast::BinaryOperator::And,
+};
+
+LogicalOperator4: ast::BinaryOperator = {
     "||" => ast::BinaryOperator::Or,
-    "^^" => ast::BinaryOperator::Xor,
 };
 
 VariableDefinition: ast::VariableDefinition<'input> = {
@@ -271,23 +232,23 @@ VariableIdentifier: ast::VariableIdentifier<'input> = {
 Identifier: &'input str =
     <name:r"[a-zA-Z][a-zA-Z0-9]*"> => name;
 
-String: ast::Value<'input> = {
-    <value:r"'[^\n\r']*'"> => ast::Value::String(&<>[1..<>.len()-1]),
-    <value:r"`[^\n\r`]*`"> => ast::Value::String(&<>[1..<>.len()-1]),
+String: ast::Constant<'input> = {
+    <value:r"'[^\n\r']*'"> => ast::Constant::String(&<>[1..<>.len()-1]),
+    <value:r"`[^\n\r`]*`"> => ast::Constant::String(&<>[1..<>.len()-1]),
 };
 
-Number: ast::Value<'input> = {
-    <value:r"[0-9]+"> => ast::Value::Integer(u64::from_str(<>).unwrap()),
-    <value:r"[0-9]+\.[0-9]+"> => ast::Value::Float(f64::from_str(<>).unwrap()),
+Number: ast::Constant<'input> = {
+    <value:r"[0-9]+"> => ast::Constant::Integer(u64::from_str(<>).unwrap()),
+    <value:r"[0-9]+\.[0-9]+"> => ast::Constant::Float(f64::from_str(<>).unwrap()),
 }
 
-Value: ast::Value<'input> = {
+Constant: ast::Constant<'input> = {
     Number,
     String,
-    "true" => ast::Value::Boolean(true),
-    "false" => ast::Value::Boolean(false),
-    "undefined" => ast::Value::Undefined,
-    "null" => ast::Value::Null,
+    "true" => ast::Constant::Boolean(true),
+    "false" => ast::Constant::Boolean(false),
+    "undefined" => ast::Constant::Undefined,
+    "null" => ast::Constant::Null,
 };
 
 VariableKind: ast::VariableKind = {

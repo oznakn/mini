@@ -24,7 +24,6 @@ pub enum BinaryOperator {
     GreaterEqual,
     And,
     Or,
-    Xor,
 }
 
 #[derive(Clone, Debug)]
@@ -71,8 +70,9 @@ pub enum Statement<'input> {
 
 #[derive(Clone, Debug)]
 pub enum Expression<'input> {
-    ValueExpression {
-        value: Value<'input>,
+    ConstantExpression {
+        location: (usize, usize),
+        value: Constant<'input>,
     },
     VariableExpression {
         identifier: VariableIdentifier<'input>,

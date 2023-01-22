@@ -188,7 +188,7 @@ impl<'input> SymbolTable<'input> {
         expression: &'input ast::Expression<'input>,
     ) -> Result<ast::VariableKind, CompilerError<'input>> {
         match expression {
-            ast::Expression::ValueExpression { value } => Ok(value.get_kind()),
+            ast::Expression::ConstantExpression { value, .. } => Ok(value.get_kind()),
 
             ast::Expression::VariableExpression { identifier } => {
                 let variable = self.get_variable_identifier(scope, identifier)?;
