@@ -90,9 +90,10 @@ FunctionReturnKind: ast::VariableKind = {
 };
 
 FunctionStatement: ast::Statement<'input> = {
-    <l1:@L> "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" <return_kind:(":" <FunctionReturnKind>)?> <l2:@R> <statements:Body> => ast::Statement::FunctionStatement {
+    <l1:@L> "function" <ll1:@L> <identifier:Identifier> <ll2:@R> "(" <parameters:CommaList<VariableDefinition>> ")" <return_kind:(":" <FunctionReturnKind>)?> <l2:@R> <statements:Body> => ast::Statement::FunctionStatement {
+        location: (l1, l2),
         definition: ast::VariableDefinition {
-            location: (l1, l2),
+            location: (ll1, ll2),
             identifier,
             kind: Some(ast::VariableKind::Function {
                 return_kind: Box::new(return_kind.or_else(|| Some(ast::VariableKind::Undefined)).unwrap()),

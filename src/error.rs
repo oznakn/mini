@@ -10,13 +10,11 @@ pub enum CompilerError<'input> {
     ParserError(ParseError<usize, Token<'input>, &'static str>),
     VariableAlreadyDefined(&'input str),
     VariableNotDefined(&'input str),
-    CannotIndexOnType(&'input str),
-    PropertyNotExists(&'input str),
-    InvalidFunctionCall,
-    InvalidNumberOfArguments(usize, usize),
-    VariableTypeCannotBeInfered,
-    InvalidArgumentType(ast::VariableKind, ast::VariableKind),
-    CannotAssignConstVariable,
+    InvalidFunctionCall(&'input str),
+    InvalidNumberOfArguments(&'input str, usize, usize),
+    VariableTypeCannotBeInfered(&'input str),
+    InvalidArgumentType(&'input str, ast::VariableKind, ast::VariableKind),
+    CannotAssignConstVariable(&'input str),
 }
 
 impl<'input> fmt::Display for CompilerError<'input> {
@@ -57,48 +55,49 @@ impl<'input> fmt::Display for CompilerError<'input> {
                     v.yellow()
                 )
             }
-            CompilerError::CannotIndexOnType(v) => {
+            CompilerError::InvalidFunctionCall(v) => {
                 write!(
                     f,
-                    "{}: cannot index into a value of type `{}`",
+                    "{}: function call on variable `{}` invalid",
+                    "error:".red(),
+                    v.yellow(),
+                )
+            }
+            CompilerError::InvalidNumberOfArguments(v, expected, got) => {
+                write!(
+                    f,
+                    "{}: function `{}` expects {} arguments, but got {}",
+                    "error:".red(),
+                    v.yellow(),
+                    format!("{}", expected).yellow(),
+                    format!("{}", got).yellow(),
+                )
+            }
+            CompilerError::VariableTypeCannotBeInfered(v) => {
+                write!(
+                    f,
+                    "{}: type of variable `{}` cannot be infered",
                     "error:".red(),
                     v.yellow()
                 )
             }
-            CompilerError::PropertyNotExists(p) => {
+            CompilerError::InvalidArgumentType(v, expected, got) => {
                 write!(
                     f,
-                    "{}: property `{}` does not exist",
+                    "{}: function `{}` expects argument type `{}`, but got `{}`",
                     "error:".red(),
-                    p.yellow()
-                )
-            }
-            CompilerError::InvalidFunctionCall => {
-                write!(f, "{}: invalid function call", "error:".red(),)
-            }
-            CompilerError::InvalidNumberOfArguments(expected, got) => {
-                write!(
-                    f,
-                    "{}: function expected {} arguments, but got {}",
-                    "error:".red(),
-                    expected,
-                    got
-                )
-            }
-            CompilerError::VariableTypeCannotBeInfered => {
-                write!(f, "{}: cannot infer type of variable", "error:".red(),)
-            }
-            CompilerError::InvalidArgumentType(expected, got) => {
-                write!(
-                    f,
-                    "{}: expected argument of type `{}`, but got `{}`",
-                    "error:".red(),
+                    v.yellow(),
                     expected.get_name().yellow(),
                     got.get_name().yellow(),
                 )
             }
-            CompilerError::CannotAssignConstVariable => {
-                write!(f, "{}: cannot assign to a const variable", "error:".red())
+            CompilerError::CannotAssignConstVariable(v) => {
+                write!(
+                    f,
+                    "{}: cannot assign to const variable `{}`",
+                    "error:".red(),
+                    v.yellow()
+                )
             }
         }
     }

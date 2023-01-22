@@ -202,7 +202,9 @@ impl<'input> SymbolTable<'input> {
                     return Ok(kind.clone());
                 }
 
-                Err(CompilerError::VariableTypeCannotBeInfered)
+                Err(CompilerError::VariableTypeCannotBeInfered(
+                    variable_obj.definition.identifier,
+                ))
             }
 
             ast::Expression::CommaExpression { expressions, .. } => {
@@ -248,7 +250,11 @@ impl<'input> SymbolTable<'input> {
                     ast::VariableKind::Function { return_kind, .. } => {
                         Ok(return_kind.as_ref().to_owned())
                     }
-                    _ => return Err(CompilerError::InvalidFunctionCall),
+                    _ => {
+                        return Err(CompilerError::InvalidFunctionCall(
+                            variable_obj.definition.identifier,
+                        ))
+                    }
                 }
             }
         }
@@ -267,7 +273,9 @@ impl<'input> SymbolTable<'input> {
                 let variable_obj = self.variable_arena.get_mut(variable).unwrap();
 
                 if variable_obj.definition.is_writable == false {
-                    return Err(CompilerError::CannotAssignConstVariable);
+                    return Err(CompilerError::CannotAssignConstVariable(
+                        variable_obj.definition.identifier,
+                    ));
                 }
 
                 variable_obj.assignments.push(expression);
@@ -394,11 +402,31 @@ impl<'input> SymbolTable<'input> {
 impl<'input> SymbolTable<'input> {
     fn check_types_for_variable(&self, variable: NodeId) -> Result<(), CompilerError<'input>> {
         let variable_obj = self.variable_arena.get(variable).unwrap();
+
+        if variable_obj.calls.len() > 0 {
+            let fn_kind_length = variable_obj
+                .kinds
+                .iter()
+                .filter(|k| match k {
+                    ast::VariableKind::Function { .. } => true,
+                    _ => false,
+                })
+                .collect::<Vec<_>>()
+                .len();
+
+            if fn_kind_length == 0 {
+                return Err(CompilerError::InvalidFunctionCall(
+                    variable_obj.definition.identifier,
+                ));
+            }
+        }
+
         for kind in &variable_obj.kinds {
             if let ast::VariableKind::Function { parameters, .. } = kind {
                 for arguments in &variable_obj.calls {
                     if arguments.len() != parameters.len() {
                         return Err(CompilerError::InvalidNumberOfArguments(
+                            variable_obj.definition.identifier,
                             parameters.len(),
                             arguments.len(),
                         ));
@@ -410,6 +438,7 @@ impl<'input> SymbolTable<'input> {
 
                         if argument_kind != *parameter {
                             return Err(CompilerError::InvalidArgumentType(
+                                variable_obj.definition.identifier,
                                 parameter.clone(),
                                 argument_kind,
                             ));

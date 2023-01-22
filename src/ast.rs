@@ -68,6 +68,7 @@ pub enum Statement<'input> {
         expression: Option<Expression<'input>>,
     },
     FunctionStatement {
+        location: (usize, usize),
         definition: VariableDefinition<'input>,
         parameters: Vec<VariableDefinition<'input>>,
         statements: Vec<Statement<'input>>,

@@ -3,5 +3,5 @@
 // let a;
 // let c;
 // let d;
-let e = 0;
-// a = c = d = e + 5;
+let e: number = 5;
+e();
