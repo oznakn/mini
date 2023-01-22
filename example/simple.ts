@@ -1,4 +1,4 @@
-function x(): number {
+function x() {
     const a: number = 10;
     return a;
 }

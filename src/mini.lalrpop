@@ -97,13 +97,17 @@ FunctionStatement: ast::Statement<'input> = {
         definition: ast::VariableDefinition {
             location: (ll1, ll2),
             identifier,
-            kind: Some(ast::VariableKind::Function {
-                return_kind: Box::new(return_kind.or_else(|| Some(ast::VariableKind::Undefined)).unwrap()),
-                parameters: parameters
-                            .iter()
-                            .map(|parameter| parameter.kind.as_ref().unwrap().clone())
-                            .collect(),
-            }),
+            kind: Some(ast::VariableKind::Function(
+                Box::new(
+                    ast::FunctionKind {
+                        return_kind: return_kind.or_else(|| Some(ast::VariableKind::Undefined)).unwrap(),
+                        parameters: parameters
+                                .iter()
+                                .map(|parameter| parameter.kind.as_ref().unwrap().clone())
+                                .collect(),
+                    }
+                ),
+            )),
             is_writable: false,
         },
         parameters,

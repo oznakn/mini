@@ -137,12 +137,13 @@ impl<'input> IRGenerator<'input> {
         let scope = self.symbol_table.scope(self.symbol_table.global_scope);
 
         let main_function = st::Function {
-            id: 1000,
+            id: usize::MAX,
             function_scope_id: scope.id,
             name: "main".as_ref(),
-            kind: Some(value::VariableKind::Function {
+            definition: None,
+            kind: Some(ast::FunctionKind {
                 parameters: Vec::new(),
-                return_kind: Box::new(value::VariableKind::Number),
+                return_kind: value::VariableKind::Number,
             }),
             returns: Vec::new(),
         };

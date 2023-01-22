@@ -5,10 +5,7 @@ pub enum VariableKind {
     Boolean,
     String,
     Number,
-    Function {
-        parameters: Vec<VariableKind>,
-        return_kind: Box<VariableKind>,
-    },
+    Function(Box<FunctionKind>),
 }
 
 impl VariableKind {
@@ -38,6 +35,12 @@ impl VariableKind {
 
         return VariableKind::String;
     }
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct FunctionKind {
+    pub parameters: Vec<VariableKind>,
+    pub return_kind: VariableKind,
 }
 
 #[derive(Clone, Debug)]
