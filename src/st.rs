@@ -39,7 +39,7 @@ pub struct Scope<'input> {
 
 #[derive(Clone, Debug)]
 pub struct SymbolTable<'input> {
-    pub global: NodeId,
+    pub global_scope: NodeId,
 
     pub scope_arena: Vec<Scope<'input>>,
     pub variable_arena: Vec<Variable<'input>>,
@@ -50,7 +50,7 @@ impl<'input> SymbolTable<'input> {
         program: &'input ast::Program<'input>,
     ) -> Result<SymbolTable<'input>, CompilerError<'input>> {
         let mut symbol_table = SymbolTable {
-            global: 0,
+            global_scope: 0,
             scope_arena: Vec::new(),
             variable_arena: Vec::new(),
         };
@@ -410,7 +410,7 @@ impl<'input> SymbolTable<'input> {
         variable_id: NodeId,
     ) -> Result<(), CompilerError<'input>> {
         let variable = self.variable_arena.get(variable_id).unwrap();
-        let kind = self.get_kind_from_assignments(variable_id, variable.kind.clone())?;
+        let kind = self.get_kind_from_assignments(variable_id, variable.definition.kind.clone())?;
 
         let variable = self.variable_arena.get_mut(variable_id).unwrap();
         variable.kind = Some(kind);
