@@ -33,6 +33,7 @@ pub struct Scope<'input> {
 pub struct SymbolTable<'input> {
     pub global: NodeId,
 
+    pub content: &'input str,
     pub program: &'input ast::Program<'input>,
 
     pub scope_arena: Vec<Scope<'input>>,
@@ -41,10 +42,12 @@ pub struct SymbolTable<'input> {
 
 impl<'input> SymbolTable<'input> {
     pub fn from(
+        content: &'input str,
         program: &'input ast::Program<'input>,
     ) -> Result<SymbolTable<'input>, CompilerError<'input>> {
         let mut symbol_table = SymbolTable {
             global: 0,
+            content,
             program,
             scope_arena: Vec::new(),
             variable_arena: Vec::new(),
@@ -347,8 +350,6 @@ impl<'input> SymbolTable<'input> {
         variable: NodeId,
     ) -> Result<Vec<ast::VariableKind>, CompilerError<'input>> {
         let variable_obj = self.variable_arena.get(variable).unwrap();
-
-        dbg!(&variable_obj.assignments);
 
         let kind_results = variable_obj
             .assignments

@@ -17,9 +17,8 @@ fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
         .parse(&content)
         .map_err(|err| CompilerError::ParserError(err).to_string())?;
 
-    let symbol_table = st::SymbolTable::from(&program).map_err(|err| err.to_string())?;
-
-    dbg!(&symbol_table);
+    let symbol_table = st::SymbolTable::from(&content, &program).map_err(|err| err.to_string())?;
+    dbg!(&symbol_table.variable_arena);
 
     Ok(())
 }
