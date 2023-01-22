@@ -61,14 +61,10 @@ impl<'input> IRGenerator<'input> {
         })
     }
 
-    fn init_function(
-        &mut self,
-        scope: &'input st::Scope<'input>,
-    ) -> Result<(), CompilerError<'input>> {
-        let definition = if let Some(definition) = scope.definition {
-            definition.clone()
-        } else {
-            ast::VariableDefinition {
+    fn init_scope(&mut self, scope: &st::Scope<'input>) -> Result<(), CompilerError<'input>> {
+        let definition = match scope.kind {
+            st::ScopeKind::Function => scope.definition.unwrap().clone(),
+            st::ScopeKind::Global => ast::VariableDefinition {
                 location: (0, 0),
                 identifier: "main".as_ref(),
                 kind: Some(ast::VariableKind::Function {
@@ -76,7 +72,8 @@ impl<'input> IRGenerator<'input> {
                     return_kind: Box::new(ast::VariableKind::Number),
                 }),
                 is_writable: false,
-            }
+            },
+            _ => unreachable!(),
         };
 
         let signature = definition.kind.clone().unwrap().get_signature();
@@ -95,11 +92,14 @@ impl<'input> IRGenerator<'input> {
 
         let main_block = bcx.create_block();
         bcx.switch_to_block(main_block);
+
+        visit_statements(&mut bcx, scope.statements)?;
+        if scope.kind == st::ScopeKind::Global {
+            put_return(&mut bcx, None)?;
+        }
+
         bcx.seal_block(main_block);
 
-        visit_statements(&mut bcx, scope)?;
-
-        bcx.seal_all_blocks();
         bcx.finalize();
 
         self.module
@@ -110,13 +110,18 @@ impl<'input> IRGenerator<'input> {
                 CompilerError::CodeGenError(err.to_string())
             })?;
 
+        for s_id in scope.scopes.iter() {
+            let s = self.symbol_table.scope(s_id.to_owned());
+            self.init_scope(s)?;
+        }
+
         Ok(())
     }
 
     pub fn init(&mut self) -> Result<(), CompilerError<'input>> {
         let scope = self.symbol_table.scope(self.symbol_table.global_scope);
 
-        self.init_function(scope)?;
+        self.init_scope(scope)?;
 
         Ok(())
     }
@@ -124,7 +129,7 @@ impl<'input> IRGenerator<'input> {
 
 fn build_expression<'input>(
     bcx: &mut FunctionBuilder,
-    expression: &'input ast::Expression<'input>,
+    expression: &ast::Expression<'input>,
 ) -> Result<Variable, CompilerError<'input>> {
     match expression {
         ast::Expression::ConstantExpression { value, .. } => match value {
@@ -140,41 +145,42 @@ fn build_expression<'input>(
             }
             _ => unimplemented!(),
         },
-        _ => {
-            let v = new_variable();
 
-            bcx.declare_var(v, types::I64);
-
-            let tmp = bcx.ins().iconst(types::I64, 0);
-            bcx.def_var(v, tmp);
-
-            Ok(v)
-        }
+        _ => unreachable!(),
     }
 }
 
 fn put_return<'input>(
     bcx: &mut FunctionBuilder,
-    expression: Option<&'input ast::Expression<'input>>,
+    expression: Option<&ast::Expression<'input>>,
 ) -> Result<(), CompilerError<'input>> {
-    {
-        if let Some(expression) = expression {
-            let v = build_expression(bcx, expression)?;
+    let return_block = bcx.create_block();
+    bcx.switch_to_block(return_block);
 
-            let r = bcx.use_var(v);
+    let v = if let Some(expression) = expression {
+        build_expression(bcx, expression)?
+    } else {
+        let v = new_variable();
 
-            bcx.ins().return_(&[r]);
-        } else {
-            bcx.ins().return_(&[]);
-        }
-    }
+        bcx.declare_var(v, types::I64);
+
+        let tmp = bcx.ins().iconst(types::I64, 0); // return undefined
+        bcx.def_var(v, tmp);
+
+        v
+    };
+
+    let r = bcx.use_var(v);
+    bcx.ins().return_(&[r]);
+
+    bcx.seal_block(return_block);
 
     Ok(())
 }
 
 fn visit_statement<'input>(
     bcx: &mut FunctionBuilder,
-    statement: &'input ast::Statement<'input>,
+    statement: &ast::Statement<'input>,
 ) -> Result<(), CompilerError<'input>> {
     match statement {
         ast::Statement::ReturnStatement { expression, .. } => {
@@ -189,9 +195,9 @@ fn visit_statement<'input>(
 
 fn visit_statements<'input>(
     bcx: &mut FunctionBuilder,
-    scope: &'input st::Scope<'input>,
+    statements: &[ast::Statement<'input>],
 ) -> Result<(), CompilerError<'input>> {
-    for statement in scope.statements.iter() {
+    for statement in statements.iter() {
         visit_statement(bcx, statement)?;
     }
 

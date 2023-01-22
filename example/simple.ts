@@ -1,1 +1,4 @@
-return 3;
+function x() {
+    return 3;
+}
+

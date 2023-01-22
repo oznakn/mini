@@ -1,7 +1,7 @@
 use indexmap::IndexMap;
 
-use crate::ast;
 use crate::error::CompilerError;
+use crate::{ast, value};
 
 pub type NodeId = usize;
 
@@ -16,9 +16,10 @@ pub struct Variable<'input> {
     pub definition: &'input ast::VariableDefinition<'input>,
     pub assignments: Vec<&'input ast::Expression<'input>>,
     pub calls: Vec<&'input Vec<ast::Expression<'input>>>,
+    pub returns: Vec<&'input ast::Expression<'input>>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum ScopeKind {
     Global,
     Function,
@@ -29,10 +30,12 @@ pub enum ScopeKind {
 pub struct Scope<'input> {
     pub id: NodeId,
     pub parent: Option<NodeId>,
-
-    pub definition: Option<&'input ast::VariableDefinition<'input>>,
+    pub kind: ScopeKind,
 
     pub statements: &'input Vec<ast::Statement<'input>>,
+
+    pub definition: Option<&'input ast::VariableDefinition<'input>>,
+    pub variable_id: Option<NodeId>,
 
     pub scopes: Vec<NodeId>,
     pub variables: IndexMap<&'input str, NodeId>,
@@ -55,7 +58,7 @@ impl<'input> SymbolTable<'input> {
             scope_arena: Vec::new(),
             variable_arena: Vec::new(),
         };
-        symbol_table.new_scope(None, &program.statements)?; // will register global scope with id 0
+        symbol_table.new_global_scope(&program.statements)?; // will register global scope with id 0
 
         symbol_table.build_variable_fields()?;
         symbol_table.build_types()?;
@@ -74,17 +77,41 @@ impl<'input> SymbolTable<'input> {
 }
 
 impl<'input> SymbolTable<'input> {
-    fn new_scope(
+    fn new_global_scope(
         &mut self,
-        definition: Option<&'input ast::VariableDefinition<'input>>,
         statements: &'input Vec<ast::Statement<'input>>,
     ) -> Result<NodeId, CompilerError<'input>> {
         let scope_id = self.scope_arena.len();
         self.scope_arena.push(Scope {
             id: scope_id,
-            parent: None,
-            definition,
+            kind: ScopeKind::Global,
             statements,
+            parent: None,
+            definition: None,
+            variable_id: None,
+            scopes: Vec::new(),
+            variables: IndexMap::new(),
+        });
+
+        self.build_scope(scope_id)?;
+
+        Ok(scope_id)
+    }
+
+    fn new_function_scope(
+        &mut self,
+        statements: &'input Vec<ast::Statement<'input>>,
+        definition: &'input ast::VariableDefinition<'input>,
+        variable_id: NodeId,
+    ) -> Result<NodeId, CompilerError<'input>> {
+        let scope_id = self.scope_arena.len();
+        self.scope_arena.push(Scope {
+            id: scope_id,
+            kind: ScopeKind::Function,
+            statements,
+            parent: None,
+            definition: Some(definition),
+            variable_id: Some(variable_id),
             scopes: Vec::new(),
             variables: IndexMap::new(),
         });
@@ -114,7 +141,7 @@ impl<'input> SymbolTable<'input> {
         &mut self,
         scope_id: NodeId,
         definition: &'input ast::VariableDefinition<'input>,
-    ) -> Result<(), CompilerError<'input>> {
+    ) -> Result<NodeId, CompilerError<'input>> {
         let scope = self.scope_arena.get_mut(scope_id).unwrap();
 
         if scope.variables.contains_key(definition.identifier) {
@@ -130,10 +157,11 @@ impl<'input> SymbolTable<'input> {
             definition,
             assignments: Vec::new(),
             calls: Vec::new(),
+            returns: Vec::new(),
         });
         scope.variables.insert(definition.identifier, variable_id);
 
-        Ok(())
+        Ok(variable_id)
     }
 
     fn build_scope(&mut self, scope_id: NodeId) -> Result<(), CompilerError<'input>> {
@@ -147,9 +175,10 @@ impl<'input> SymbolTable<'input> {
                     statements,
                     ..
                 } => {
-                    self.add_variable(scope_id, &definition)?;
+                    let variable_id = self.add_variable(scope_id, &definition)?;
 
-                    let new_scope_id = self.new_scope(Some(definition), statements)?;
+                    let new_scope_id =
+                        self.new_function_scope(statements, definition, variable_id)?;
                     for parameter in parameters {
                         self.add_variable(new_scope_id, parameter)?;
                     }
@@ -250,6 +279,17 @@ impl<'input> SymbolTable<'input> {
             ast::Statement::ReturnStatement { expression, .. } => {
                 if let Some(expression) = expression {
                     self.build_variable_fields_for_expression(scope_id, expression)?;
+
+                    let scope = self.scope(scope_id);
+
+                    if scope.kind == ScopeKind::Global {
+                        return Err(CompilerError::CannotReturnFromGlobalScope);
+                    }
+
+                    let variable_id = scope.variable_id.unwrap();
+                    let variable = self.variable_arena.get_mut(variable_id).unwrap();
+
+                    variable.returns.push(expression);
                 }
             }
 
@@ -375,6 +415,44 @@ impl<'input> SymbolTable<'input> {
         }
     }
 
+    fn get_return_kind_from_returns(
+        &self,
+        variable_id: NodeId,
+        base_kind: ast::VariableKind,
+    ) -> Result<ast::VariableKind, CompilerError<'input>> {
+        let variable = self.variable_arena.get(variable_id).unwrap();
+
+        if let value::VariableKind::Function { .. } = variable.kind.as_ref().unwrap() {
+            let kind_results = variable
+                .returns
+                .iter()
+                .map(|a| self.get_expression_kind(variable.scope_id, a))
+                .collect::<Vec<_>>();
+
+            let mut curr_kind = base_kind;
+
+            for kind in kind_results {
+                let kind = kind?;
+
+                if curr_kind == ast::VariableKind::Undefined {
+                    curr_kind = kind.clone();
+                }
+
+                if kind != curr_kind {
+                    return Err(CompilerError::InvalidAssignment(
+                        variable.definition.identifier,
+                        curr_kind,
+                        kind,
+                    ));
+                }
+            }
+
+            Ok(curr_kind)
+        } else {
+            unreachable!()
+        }
+    }
+
     fn get_kind_from_assignments(
         &self,
         variable_id: NodeId,
@@ -396,24 +474,48 @@ impl<'input> SymbolTable<'input> {
             ));
         }
 
-        let first_kind = base_kind
+        let curr_kind = base_kind
             .or_else(|| Some(kind_results.first().unwrap().clone().unwrap()))
             .unwrap();
 
         for kind in kind_results {
             let kind = kind?;
-            if kind != first_kind {
+            if kind != curr_kind {
                 return Err(CompilerError::InvalidAssignment(
                     variable.definition.identifier,
-                    first_kind,
+                    curr_kind,
                     kind,
                 ));
             }
         }
 
-        Ok(first_kind)
+        Ok(curr_kind)
     }
 
+    fn build_return_type_for_functions(
+        &mut self,
+        variable_id: NodeId,
+    ) -> Result<(), CompilerError<'input>> {
+        let variable = self.variable_arena.get(variable_id).unwrap();
+
+        if let Some(value::VariableKind::Function {
+            return_kind,
+            parameters,
+        }) = &variable.kind
+        {
+            let return_kind =
+                self.get_return_kind_from_returns(variable_id, return_kind.as_ref().to_owned())?;
+            let kind = value::VariableKind::Function {
+                return_kind: Box::new(return_kind),
+                parameters: parameters.clone(),
+            };
+
+            let variable = self.variable_arena.get_mut(variable_id).unwrap();
+            variable.kind = Some(kind);
+        }
+
+        Ok(())
+    }
     fn build_types_for_variable(
         &mut self,
         variable_id: NodeId,
@@ -432,6 +534,7 @@ impl<'input> SymbolTable<'input> {
 
         for variable_id in variables {
             self.build_types_for_variable(variable_id)?;
+            self.build_return_type_for_functions(variable_id)?;
         }
 
         Ok(())

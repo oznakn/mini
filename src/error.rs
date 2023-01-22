@@ -17,6 +17,7 @@ pub enum CompilerError<'input> {
     InvalidArgumentType(&'input str, ast::VariableKind, ast::VariableKind),
     InvalidAssignment(&'input str, ast::VariableKind, ast::VariableKind),
     CannotAssignConstVariable(&'input str),
+    CannotReturnFromGlobalScope,
 }
 
 impl<'input> fmt::Display for CompilerError<'input> {
@@ -110,6 +111,14 @@ impl<'input> fmt::Display for CompilerError<'input> {
                     "{}: cannot assign to const variable `{}`",
                     "error:".red(),
                     v.yellow()
+                )
+            }
+            CompilerError::CannotReturnFromGlobalScope => {
+                write!(
+                    f,
+                    "{}: cannot use `{}` in global scope",
+                    "error:".red(),
+                    "return".yellow()
                 )
             }
         }
