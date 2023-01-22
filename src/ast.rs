@@ -48,7 +48,7 @@ pub enum VariableIdentifier<'input> {
 pub struct VariableDefinition<'input> {
     pub location: (usize, usize),
     pub identifier: &'input str,
-    pub kind: Option<VariableKind>,
+    pub kind: VariableKind,
     pub is_writable: bool,
 }
 

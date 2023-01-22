@@ -12,21 +12,27 @@ impl VariableKind {
             _ => None,
         }
     }
-}
 
-impl FunctionKind {
     pub fn get_signature(&self) -> Signature {
-        let mut signature = Signature::new(CallConv::SystemV);
-        for parameter in self.parameters.iter() {
-            if let Some(param) = parameter.get_abi() {
-                signature.params.push(param);
+        match self {
+            VariableKind::Function {
+                parameters,
+                return_kind,
+            } => {
+                let mut signature = Signature::new(CallConv::SystemV);
+                for parameter in parameters {
+                    if let Some(param) = parameter.get_abi() {
+                        signature.params.push(param);
+                    }
+                }
+
+                if let Some(param) = return_kind.get_abi() {
+                    signature.returns.push(param);
+                }
+
+                signature
             }
+            _ => panic!("Not a function"),
         }
-
-        if let Some(param) = self.return_kind.get_abi() {
-            signature.returns.push(param);
-        }
-
-        signature
     }
 }

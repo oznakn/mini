@@ -2,7 +2,6 @@ use cranelift_codegen::entity::EntityRef;
 use cranelift_codegen::ir::*;
 use cranelift_codegen::isa;
 use cranelift_codegen::settings;
-use cranelift_codegen::settings::Configurable;
 use cranelift_codegen::Context;
 use cranelift_frontend::*;
 use cranelift_module::*;
@@ -52,10 +51,10 @@ impl<'input> IRGenerator<'input> {
         arch: &str,
         name: &str,
     ) -> Result<Self, CompilerError<'input>> {
-        let mut flag_builder = settings::builder();
-        flag_builder
-            .set("opt_level", "speed")
-            .expect("set optlevel");
+        let flag_builder = settings::builder();
+        // flag_builder
+        //     .set("opt_level", "speed")
+        //     .expect("set optlevel");
 
         let isa_builder = isa::lookup_by_name(arch)
             .map_err(|err| CompilerError::CodeGenError(err.to_string()))?;
@@ -86,11 +85,11 @@ impl<'input> IRGenerator<'input> {
     ) -> Result<(), CompilerError<'input>> {
         let scope = self.symbol_table.scope(function.function_scope_id);
 
-        let signature = function.kind.as_ref().unwrap().get_signature();
+        let signature = function.definition.kind.get_signature();
 
         let func_id = self
             .module
-            .declare_function(function.name, Linkage::Export, &signature)
+            .declare_function(function.definition.identifier, Linkage::Export, &signature)
             .unwrap();
 
         let mut ctx = Context::for_function(Function::with_name_signature(
@@ -118,11 +117,7 @@ impl<'input> IRGenerator<'input> {
 
         self.module
             .define_function(func_id, &mut ctx)
-            .map_err(|err| {
-                dbg!(&err);
-
-                CompilerError::CodeGenError(err.to_string())
-            })?;
+            .map_err(|err| CompilerError::CodeGenError(err.to_string()))?;
 
         for f_id in scope.functions.iter() {
             let f = self.symbol_table.function(f_id.to_owned());
@@ -139,13 +134,7 @@ impl<'input> IRGenerator<'input> {
         let main_function = st::Function {
             id: usize::MAX,
             function_scope_id: scope.id,
-            name: "main".as_ref(),
-            definition: None,
-            kind: Some(ast::FunctionKind {
-                parameters: Vec::new(),
-                return_kind: Box::new(value::VariableKind::Number),
-            }),
-            returns: Vec::new(),
+            definition: &self.symbol_table.main_def,
         };
         self.init_function(&main_function)?;
 
@@ -170,33 +159,37 @@ impl<'input> FunctionTranslator<'input> {
         Ok(())
     }
 
+    fn fetch_variable(
+        &self,
+        identifier: &'input ast::VariableIdentifier<'input>,
+    ) -> Result<Variable, CompilerError<'input>> {
+        let variable_id = self
+            .symbol_table
+            .fetch_variable_by_identifier(self.scope_id, identifier)?;
+
+        let v = self.variable_map.get(&variable_id.to_owned()).unwrap();
+
+        Ok(*v)
+    }
+
     fn translate_expression(
         &mut self,
         expression: &'input ast::Expression<'input>,
-    ) -> Result<Variable, CompilerError<'input>> {
+    ) -> Result<Value, CompilerError<'input>> {
         match expression {
             ast::Expression::ConstantExpression { value, .. } => match value {
                 value::Constant::Integer(i) => {
-                    let v = new_variable();
+                    let val = self.bcx.ins().iconst(types::I64, *i);
 
-                    self.bcx.declare_var(v, types::I64);
-
-                    let tmp = self.bcx.ins().iconst(types::I64, *i);
-                    self.bcx.def_var(v, tmp);
-
-                    Ok(v)
+                    Ok(val)
                 }
                 _ => unimplemented!(),
             },
 
             ast::Expression::VariableExpression { identifier, .. } => {
-                let variable_id = self
-                    .symbol_table
-                    .fetch_variable_by_identifier(self.scope_id, identifier)?;
+                let v = self.fetch_variable(identifier)?;
 
-                let v = self.variable_map.get(&variable_id.to_owned()).unwrap();
-
-                Ok(*v)
+                Ok(self.bcx.use_var(v))
             }
 
             ast::Expression::BinaryExpression {
@@ -210,21 +203,34 @@ impl<'input> FunctionTranslator<'input> {
                     let right = self.translate_expression(right)?;
 
                     let v = new_variable();
-
                     self.bcx.declare_var(v, types::I64);
-
-                    let left = self.bcx.use_var(left);
-                    let right = self.bcx.use_var(right);
 
                     let tmp = self.bcx.ins().iadd(left, right);
                     self.bcx.def_var(v, tmp);
 
-                    Ok(v)
+                    Ok(self.bcx.use_var(v))
                 }
                 _ => unimplemented!(),
             },
 
-            _ => unreachable!(),
+            ast::Expression::AssignmentExpression {
+                identifier,
+                expression,
+                ..
+            } => {
+                let v = self.fetch_variable(identifier)?;
+                let data = self.translate_expression(&expression)?;
+
+                self.bcx.def_var(v, data);
+
+                Ok(self.bcx.use_var(v))
+            }
+
+            _ => {
+                dbg!(&expression);
+
+                unreachable!()
+            }
         }
     }
 
@@ -237,7 +243,7 @@ impl<'input> FunctionTranslator<'input> {
 
             let v = new_variable();
 
-            match variable.kind.as_ref().unwrap() {
+            match variable.definition.kind {
                 value::VariableKind::Function { .. } => {}
                 value::VariableKind::Undefined => {}
                 value::VariableKind::Null => {}
@@ -248,7 +254,6 @@ impl<'input> FunctionTranslator<'input> {
                 }
 
                 _ => {
-                    dbg!(&variable.kind.as_ref().unwrap());
                     unimplemented!()
                 }
             }
@@ -261,26 +266,18 @@ impl<'input> FunctionTranslator<'input> {
         &mut self,
         expression: Option<&'input ast::Expression<'input>>,
     ) -> Result<(), CompilerError<'input>> {
-        let return_block = self.bcx.create_block();
-        self.bcx.switch_to_block(return_block);
-
         let v = if let Some(expression) = expression {
             self.translate_expression(expression)?
         } else {
-            let v = new_variable();
-
-            self.bcx.declare_var(v, types::I64);
-
-            let tmp = self.bcx.ins().iconst(types::I64, 0); // return undefined
-            self.bcx.def_var(v, tmp);
-
-            v
+            self.bcx.ins().iconst(types::I64, 0)
         };
 
-        let r = self.bcx.use_var(v);
-        self.bcx.ins().return_(&[r]);
+        // let return_block = self.bcx.create_block();
+        // self.bcx.switch_to_block(return_block);
 
-        self.bcx.seal_block(return_block);
+        self.bcx.ins().return_(&[v]);
+
+        // self.bcx.seal_block(return_block);
 
         Ok(())
     }
@@ -292,6 +289,28 @@ impl<'input> FunctionTranslator<'input> {
         match statement {
             ast::Statement::ReturnStatement { expression, .. } => {
                 self.put_return(expression.as_ref())?;
+            }
+
+            ast::Statement::ExpressionStatement { expression, .. } => {
+                self.translate_expression(expression)?;
+            }
+
+            ast::Statement::DefinitionStatement {
+                definition,
+                expression,
+                ..
+            } => {
+                if let Some(expression) = expression {
+                    let data = self.translate_expression(expression)?;
+
+                    let variable_id = self
+                        .symbol_table
+                        .fetch_variable_by_name(self.scope_id, definition.identifier)?;
+
+                    let v = self.variable_map.get(&variable_id.to_owned()).unwrap();
+
+                    self.bcx.def_var(*v, data);
+                }
             }
 
             _ => {}

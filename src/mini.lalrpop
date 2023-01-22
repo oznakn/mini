@@ -92,20 +92,18 @@ FunctionReturnKind: ast::VariableKind = {
 };
 
 FunctionStatement: ast::Statement<'input> = {
-    <l1:@L> "function" <ll1:@L> <identifier:Identifier> <ll2:@R> "(" <parameters:CommaList<VariableDefinition>> ")" <return_kind:(":" <FunctionReturnKind>)?> <l2:@R> <statements:Body> => ast::Statement::FunctionStatement {
+    <l1:@L> "function" <ll1:@L> <identifier:Identifier> <ll2:@R> "(" <parameters:CommaList<VariableDefinition>> ")" ":" <return_kind:FunctionReturnKind> <l2:@R> <statements:Body> => ast::Statement::FunctionStatement {
         location: (l1, l2),
         definition: ast::VariableDefinition {
             location: (ll1, ll2),
             identifier,
-        kind: Some(ast::VariableKind::Function(
-                ast::FunctionKind {
-                    return_kind: Box::new(return_kind.or_else(|| Some(ast::VariableKind::Undefined)).unwrap()),
-                    parameters: parameters
-                            .iter()
-                            .map(|parameter| parameter.kind.as_ref().unwrap().clone())
-                            .collect(),
-                }
-            )),
+            kind: ast::VariableKind::Function {
+                return_kind: Box::new(return_kind),
+                parameters: parameters
+                        .iter()
+                        .map(|parameter| parameter.kind.clone())
+                        .collect(),
+            },
             is_writable: false,
         },
         parameters,
@@ -126,7 +124,7 @@ DefinitionStatementPrefix = {
 };
 
 DefinitionStatement: ast::Statement<'input> = {
-    <l1:@L> <prefix:DefinitionStatementPrefix> <definition:VariableDefinitionOptionalKind> <e:("=" <Expression>)?> ";" <l2:@R> => {
+    <l1:@L> <prefix:DefinitionStatementPrefix> <definition:VariableDefinition> <e:("=" <Expression>)?> ";" <l2:@R> => {
         let mut definition = definition;
         definition.is_writable = prefix == "let";
 
@@ -238,17 +236,7 @@ VariableDefinition: ast::VariableDefinition<'input> = {
     <l1:@L> <identifier:Identifier> ":" <kind:VariableKind> <l2:@R> => ast::VariableDefinition {
         location: (l1, l2),
         identifier,
-        kind: Some(kind),
-        is_writable: true,
-    },
-}
-
-VariableDefinitionOptionalKind: ast::VariableDefinition<'input> = {
-    VariableDefinition,
-    <l1:@L> <identifier:Identifier> <l2:@R> => ast::VariableDefinition {
-        location: (l1, l2),
-        identifier,
-        kind: None,
+        kind,
         is_writable: true,
     },
 }
