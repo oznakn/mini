@@ -1,3 +1,3 @@
-function x(): void {
+function x(): number {
 
 }

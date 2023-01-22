@@ -1,3 +1,5 @@
+#![allow(unused_imports)]
+use cranelift_codegen::entity::EntityRef;
 use cranelift_codegen::ir::*;
 use cranelift_codegen::isa;
 use cranelift_codegen::settings;
@@ -10,22 +12,15 @@ use crate::ast;
 use crate::error::CompilerError;
 use crate::st;
 
-pub struct IRFunction<'input> {
-    pub definition: &'input ast::VariableDefinition<'input>,
-
-    pub ctx: Context,
-
-    pub block: Block,
-    pub func_id: FuncId,
-}
-
 pub struct IRGenerator<'input> {
     pub symbol_table: &'input st::SymbolTable<'input>,
     pub module: ObjectModule,
 
     pub function_counter: usize,
 
-    pub current_func: Option<IRFunction<'input>>,
+    pub current_func: Option<FuncId>,
+    pub current_ctx: Option<Context>,
+    pub current_block: Option<Block>,
 }
 
 impl<'input> IRGenerator<'input> {
@@ -53,6 +48,8 @@ impl<'input> IRGenerator<'input> {
             module,
             function_counter: 0,
             current_func: None,
+            current_ctx: None,
+            current_block: None,
         })
     }
 
@@ -105,31 +102,30 @@ impl<'input> IRGenerator<'input> {
         let mut bcx = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
         let block = bcx.create_block();
 
-        self.current_func = Some(IRFunction {
-            definition,
-            ctx,
-            block,
-            func_id,
-        });
+        self.current_block = Some(block);
+        self.current_ctx = Some(ctx);
+        self.current_func = Some(func_id);
 
         Ok(())
     }
 
     fn end_function(&mut self) -> Result<(), CompilerError<'input>> {
-        let ir_function = self.current_func.as_mut().unwrap();
+        let mut func_ctx = FunctionBuilderContext::new();
+        let ctx = &mut self.current_ctx.as_mut().unwrap();
+        let mut bcx = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
 
         {
-            let mut func_ctx = FunctionBuilderContext::new();
-            let mut bcx = FunctionBuilder::new(&mut ir_function.ctx.func, &mut func_ctx);
-
-            bcx.switch_to_block(ir_function.block);
-            bcx.seal_block(ir_function.block);
+            bcx.switch_to_block(self.current_block.unwrap());
+            bcx.seal_block(self.current_block.unwrap());
 
             bcx.ins().return_(&[]);
         }
 
         self.module
-            .define_function(ir_function.func_id, &mut ir_function.ctx)
+            .define_function(
+                self.current_func.unwrap(),
+                &mut self.current_ctx.as_mut().unwrap(),
+            )
             .map_err(|err| {
                 dbg!(&err);
 
