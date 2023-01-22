@@ -19,7 +19,7 @@ fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
         .map_err(|err| CompilerError::ParserError(err).to_string())?;
 
     let symbol_table = st::SymbolTable::from(&program).map_err(|err| err.to_string())?;
-    dbg!(&symbol_table.variable_arena);
+    // dbg!(&symbol_table.variable_arena);
 
     let mut ir_generator = gen::IRGenerator::new(&symbol_table, "aarch64-apple-darwin", "foo")
         .map_err(|err| err.to_string())?;

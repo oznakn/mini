@@ -29,12 +29,13 @@ pub enum ScopeKind {
 #[derive(Clone, Debug)]
 pub struct Scope<'input> {
     pub id: NodeId,
-    pub parent: Option<NodeId>,
+
+    pub name: &'input str,
     pub kind: ScopeKind,
+    pub parent: Option<NodeId>,
 
     pub statements: &'input Vec<ast::Statement<'input>>,
 
-    pub definition: Option<&'input ast::VariableDefinition<'input>>,
     pub variable_id: Option<NodeId>,
 
     pub scopes: Vec<NodeId>,
@@ -84,10 +85,10 @@ impl<'input> SymbolTable<'input> {
         let scope_id = self.scope_arena.len();
         self.scope_arena.push(Scope {
             id: scope_id,
+            name: "".as_ref(),
             kind: ScopeKind::Global,
-            statements,
             parent: None,
-            definition: None,
+            statements,
             variable_id: None,
             scopes: Vec::new(),
             variables: IndexMap::new(),
@@ -101,16 +102,16 @@ impl<'input> SymbolTable<'input> {
     fn new_function_scope(
         &mut self,
         statements: &'input Vec<ast::Statement<'input>>,
-        definition: &'input ast::VariableDefinition<'input>,
+        variable_name: &'input str,
         variable_id: NodeId,
     ) -> Result<NodeId, CompilerError<'input>> {
         let scope_id = self.scope_arena.len();
         self.scope_arena.push(Scope {
             id: scope_id,
+            name: variable_name,
             kind: ScopeKind::Function,
-            statements,
             parent: None,
-            definition: Some(definition),
+            statements,
             variable_id: Some(variable_id),
             scopes: Vec::new(),
             variables: IndexMap::new(),
@@ -178,7 +179,7 @@ impl<'input> SymbolTable<'input> {
                     let variable_id = self.add_variable(scope_id, &definition)?;
 
                     let new_scope_id =
-                        self.new_function_scope(statements, definition, variable_id)?;
+                        self.new_function_scope(statements, definition.identifier, variable_id)?;
                     for parameter in parameters {
                         self.add_variable(new_scope_id, parameter)?;
                     }

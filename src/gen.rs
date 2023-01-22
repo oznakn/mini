@@ -62,25 +62,34 @@ impl<'input> IRGenerator<'input> {
     }
 
     fn init_scope(&mut self, scope: &st::Scope<'input>) -> Result<(), CompilerError<'input>> {
-        let definition = match scope.kind {
-            st::ScopeKind::Function => scope.definition.unwrap().clone(),
-            st::ScopeKind::Global => ast::VariableDefinition {
-                location: (0, 0),
-                identifier: "main".as_ref(),
-                kind: Some(ast::VariableKind::Function {
-                    parameters: Vec::new(),
-                    return_kind: Box::new(ast::VariableKind::Number),
-                }),
-                is_writable: false,
+        let func_name = match scope.kind {
+            st::ScopeKind::Function => {
+                let variable = self.symbol_table.variable(scope.variable_id.unwrap());
+
+                variable.name
+            }
+            st::ScopeKind::Global => "main".as_ref(),
+            _ => unreachable!(),
+        };
+
+        let func_kind = match scope.kind {
+            st::ScopeKind::Function => {
+                let variable = self.symbol_table.variable(scope.variable_id.unwrap());
+
+                variable.kind.as_ref().unwrap().clone()
+            }
+            st::ScopeKind::Global => ast::VariableKind::Function {
+                parameters: Vec::new(),
+                return_kind: Box::new(ast::VariableKind::Number),
             },
             _ => unreachable!(),
         };
 
-        let signature = definition.kind.clone().unwrap().get_signature();
+        let signature = func_kind.get_signature();
 
         let func_id = self
             .module
-            .declare_function(definition.identifier, Linkage::Export, &signature)
+            .declare_function(func_name, Linkage::Export, &signature)
             .unwrap();
 
         self.ctx = Context::for_function(Function::with_name_signature(
