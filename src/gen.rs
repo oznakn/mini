@@ -33,6 +33,7 @@ impl<'input> IRGenerator {
         Ok(IRGenerator { module })
     }
 
+    #[allow(dead_code)]
     fn init(&mut self) -> Result<(), CompilerError<'input>> {
         Ok(())
     }
