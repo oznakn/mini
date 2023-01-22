@@ -2,10 +2,13 @@ use cranelift_codegen::entity::EntityRef;
 use cranelift_codegen::ir::*;
 use cranelift_codegen::isa;
 use cranelift_codegen::settings;
+use cranelift_codegen::settings::Configurable;
 use cranelift_codegen::Context;
 use cranelift_frontend::*;
 use cranelift_module::*;
 use cranelift_object::*;
+#[allow(unused_imports)]
+use cranelift_preopt::optimize;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::ast;
@@ -14,11 +17,12 @@ use crate::st;
 use crate::value;
 
 pub struct IRGenerator<'input> {
+    pub isa: Box<dyn isa::TargetIsa>,
+
     pub symbol_table: &'input st::SymbolTable<'input>,
     pub module: ObjectModule,
 
     pub builder_context: FunctionBuilderContext,
-    pub ctx: Context,
 }
 
 fn new_variable() -> Variable {
@@ -39,7 +43,10 @@ impl<'input> IRGenerator<'input> {
         arch: &str,
         name: &str,
     ) -> Result<Self, CompilerError<'input>> {
-        let flag_builder = settings::builder();
+        let mut flag_builder = settings::builder();
+        flag_builder
+            .set("opt_level", "speed")
+            .expect("set optlevel");
 
         let isa_builder = isa::lookup_by_name(arch)
             .map_err(|err| CompilerError::CodeGenError(err.to_string()))?;
@@ -54,9 +61,12 @@ impl<'input> IRGenerator<'input> {
         );
 
         Ok(IRGenerator {
+            isa: isa::lookup_by_name(arch)
+                .expect("isa")
+                .finish(settings::Flags::new(settings::builder()))
+                .expect("isa"),
             symbol_table,
             module,
-            ctx: Context::new(),
             builder_context: FunctionBuilderContext::new(),
         })
     }
@@ -92,12 +102,12 @@ impl<'input> IRGenerator<'input> {
             .declare_function(func_name, Linkage::Export, &signature)
             .unwrap();
 
-        self.ctx = Context::for_function(Function::with_name_signature(
+        let mut ctx = Context::for_function(Function::with_name_signature(
             UserFuncName::user(0, new_function_index().try_into().unwrap()),
             signature,
         ));
 
-        let mut bcx = FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
+        let mut bcx = FunctionBuilder::new(&mut ctx.func, &mut self.builder_context);
 
         let main_block = bcx.create_block();
         bcx.switch_to_block(main_block);
@@ -111,8 +121,14 @@ impl<'input> IRGenerator<'input> {
 
         bcx.finalize();
 
+        ctx.optimize(self.isa.as_ref())
+            .map_err(|err| CompilerError::CodeGenError(err.to_string()))?;
+
+        // optimize(&mut ctx, self.isa.as_ref())
+        //     .map_err(|err| CompilerError::CodeGenError(err.to_string()))?;
+
         self.module
-            .define_function(func_id, &mut self.ctx)
+            .define_function(func_id, &mut ctx)
             .map_err(|err| {
                 dbg!(&err);
 
@@ -136,7 +152,7 @@ impl<'input> IRGenerator<'input> {
     }
 }
 
-fn build_expression<'input>(
+fn translate_expression<'input>(
     bcx: &mut FunctionBuilder,
     expression: &ast::Expression<'input>,
 ) -> Result<Variable, CompilerError<'input>> {
@@ -148,6 +164,31 @@ fn build_expression<'input>(
                 bcx.declare_var(v, types::I64);
 
                 let tmp = bcx.ins().iconst(types::I64, *i);
+                bcx.def_var(v, tmp);
+
+                Ok(v)
+            }
+            _ => unimplemented!(),
+        },
+
+        ast::Expression::BinaryExpression {
+            operator,
+            left,
+            right,
+            ..
+        } => match operator {
+            ast::BinaryOperator::Addition => {
+                let left = translate_expression(bcx, left)?;
+                let right = translate_expression(bcx, right)?;
+
+                let v = new_variable();
+
+                bcx.declare_var(v, types::I64);
+
+                let left = bcx.use_var(left);
+                let right = bcx.use_var(right);
+
+                let tmp = bcx.ins().iadd(left, right);
                 bcx.def_var(v, tmp);
 
                 Ok(v)
@@ -167,7 +208,7 @@ fn put_return<'input>(
     bcx.switch_to_block(return_block);
 
     let v = if let Some(expression) = expression {
-        build_expression(bcx, expression)?
+        translate_expression(bcx, expression)?
     } else {
         let v = new_variable();
 

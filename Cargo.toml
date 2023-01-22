@@ -12,6 +12,7 @@ cranelift-frontend = { version = "0.92" }
 cranelift-module = { version = "0.92" }
 cranelift-native = { version = "0.92" }
 cranelift-object = { version = "0.92" }
+cranelift-preopt = { version = "0.92" }
 indexmap = { version = "1.9.2"}
 lalrpop-util = { version = "0.19.8", features = ["lexer"] }
 regex = { version = "1" }

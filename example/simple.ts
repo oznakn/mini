@@ -1,4 +1,4 @@
 function x() {
-    return 3;
+    return 3 + 4;
 }
 

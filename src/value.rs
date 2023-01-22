@@ -24,8 +24,6 @@ impl VariableKind {
     }
 
     pub fn operation_result(&self, other: &VariableKind) -> VariableKind {
-        dbg!(self, other);
-
         if other == self {
             return self.clone();
         }
