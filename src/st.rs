@@ -1,3 +1,5 @@
+use std::backtrace::Backtrace;
+
 use indexmap::IndexMap;
 
 use crate::error::CompilerError;
@@ -199,7 +201,7 @@ impl<'input> SymbolTable<'input> {
 }
 
 impl<'input> SymbolTable<'input> {
-    fn fetch_variable_by_name(
+    pub fn fetch_variable_by_name(
         &self,
         scope_id: NodeId,
         name: &'input str,
@@ -217,7 +219,7 @@ impl<'input> SymbolTable<'input> {
         Err(CompilerError::VariableNotDefined(name))
     }
 
-    fn fetch_variable_by_identifier(
+    pub fn fetch_variable_by_identifier(
         &self,
         scope_id: NodeId,
         identifier: &'input ast::VariableIdentifier<'input>,

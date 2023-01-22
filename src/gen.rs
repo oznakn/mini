@@ -28,6 +28,8 @@ pub struct IRGenerator<'input> {
 
 pub struct FunctionTranslator<'input> {
     pub symbol_table: &'input st::SymbolTable<'input>,
+    pub scope_id: st::NodeId,
+
     pub variable_map: IndexMap<st::NodeId, Variable>,
     pub bcx: FunctionBuilder<'input>,
 }
@@ -116,11 +118,14 @@ impl<'input> IRGenerator<'input> {
 
         let mut translator = FunctionTranslator {
             symbol_table: self.symbol_table,
+            scope_id: scope.id,
             variable_map: IndexMap::new(),
             bcx: FunctionBuilder::new(&mut ctx.func, &mut self.builder_context),
         };
 
-        translator.init(scope)?;
+        translator
+            .init(scope)
+            .map_err(|err| CompilerError::CodeGenError(err.to_string()))?;
         translator.bcx.finalize();
 
         // ctx.optimize(self.isa.as_ref())
@@ -155,7 +160,7 @@ impl<'input> IRGenerator<'input> {
 }
 
 impl<'input> FunctionTranslator<'input> {
-    pub fn init(&mut self, scope: &st::Scope<'input>) -> Result<(), CompilerError<'static>> {
+    pub fn init(&mut self, scope: &'input st::Scope<'input>) -> Result<(), CompilerError<'input>> {
         let main_block = self.bcx.create_block();
         self.bcx.switch_to_block(main_block);
 
@@ -173,8 +178,8 @@ impl<'input> FunctionTranslator<'input> {
 
     fn translate_expression(
         &mut self,
-        expression: &ast::Expression<'input>,
-    ) -> Result<Variable, CompilerError<'static>> {
+        expression: &'input ast::Expression<'input>,
+    ) -> Result<Variable, CompilerError<'input>> {
         match expression {
             ast::Expression::ConstantExpression { value, .. } => match value {
                 value::Constant::Integer(i) => {
@@ -189,6 +194,16 @@ impl<'input> FunctionTranslator<'input> {
                 }
                 _ => unimplemented!(),
             },
+
+            ast::Expression::VariableExpression { identifier, .. } => {
+                let variable_id = self
+                    .symbol_table
+                    .fetch_variable_by_identifier(self.scope_id, identifier)?;
+
+                let v = self.variable_map.get(&variable_id.to_owned()).unwrap();
+
+                Ok(*v)
+            }
 
             ast::Expression::BinaryExpression {
                 operator,
@@ -221,8 +236,8 @@ impl<'input> FunctionTranslator<'input> {
 
     fn define_variables(
         &mut self,
-        scope: &st::Scope<'input>,
-    ) -> Result<(), CompilerError<'static>> {
+        scope: &'input st::Scope<'input>,
+    ) -> Result<(), CompilerError<'input>> {
         for variable_id in scope.variables.values() {
             let variable = self.symbol_table.variable(variable_id.to_owned());
 
@@ -250,8 +265,8 @@ impl<'input> FunctionTranslator<'input> {
 
     fn put_return(
         &mut self,
-        expression: Option<&ast::Expression<'input>>,
-    ) -> Result<(), CompilerError<'static>> {
+        expression: Option<&'input ast::Expression<'input>>,
+    ) -> Result<(), CompilerError<'input>> {
         let return_block = self.bcx.create_block();
         self.bcx.switch_to_block(return_block);
 
@@ -278,8 +293,8 @@ impl<'input> FunctionTranslator<'input> {
 
     fn visit_statement(
         &mut self,
-        statement: &ast::Statement<'input>,
-    ) -> Result<(), CompilerError<'static>> {
+        statement: &'input ast::Statement<'input>,
+    ) -> Result<(), CompilerError<'input>> {
         match statement {
             ast::Statement::ReturnStatement { expression, .. } => {
                 self.put_return(expression.as_ref())?;
@@ -293,8 +308,8 @@ impl<'input> FunctionTranslator<'input> {
 
     fn visit_statements(
         &mut self,
-        statements: &[ast::Statement<'input>],
-    ) -> Result<(), CompilerError<'static>> {
+        statements: &'input [ast::Statement<'input>],
+    ) -> Result<(), CompilerError<'input>> {
         for statement in statements.iter() {
             self.visit_statement(statement)?;
         }
