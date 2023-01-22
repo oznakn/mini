@@ -1,4 +1,5 @@
 function x() {
-    return 3 + 4;
+    const a: number = 10;
+    return 3 + 4 + 8;
 }
 

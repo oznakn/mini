@@ -9,6 +9,7 @@ use cranelift_module::*;
 use cranelift_object::*;
 #[allow(unused_imports)]
 use cranelift_preopt::optimize;
+use indexmap::IndexMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use crate::ast;
@@ -23,6 +24,12 @@ pub struct IRGenerator<'input> {
     pub module: ObjectModule,
 
     pub builder_context: FunctionBuilderContext,
+}
+
+pub struct FunctionTranslator<'input> {
+    pub symbol_table: &'input st::SymbolTable<'input>,
+    pub variable_map: IndexMap<st::NodeId, Variable>,
+    pub bcx: FunctionBuilder<'input>,
 }
 
 fn new_variable() -> Variable {
@@ -107,22 +114,17 @@ impl<'input> IRGenerator<'input> {
             signature,
         ));
 
-        let mut bcx = FunctionBuilder::new(&mut ctx.func, &mut self.builder_context);
+        let mut translator = FunctionTranslator {
+            symbol_table: self.symbol_table,
+            variable_map: IndexMap::new(),
+            bcx: FunctionBuilder::new(&mut ctx.func, &mut self.builder_context),
+        };
 
-        let main_block = bcx.create_block();
-        bcx.switch_to_block(main_block);
+        translator.init(scope)?;
+        translator.bcx.finalize();
 
-        visit_statements(&mut bcx, scope.statements)?;
-        if scope.kind == st::ScopeKind::Global {
-            put_return(&mut bcx, None)?;
-        }
-
-        bcx.seal_block(main_block);
-
-        bcx.finalize();
-
-        ctx.optimize(self.isa.as_ref())
-            .map_err(|err| CompilerError::CodeGenError(err.to_string()))?;
+        // ctx.optimize(self.isa.as_ref())
+        //     .map_err(|err| CompilerError::CodeGenError(err.to_string()))?;
 
         // optimize(&mut ctx, self.isa.as_ref())
         //     .map_err(|err| CompilerError::CodeGenError(err.to_string()))?;
@@ -152,104 +154,151 @@ impl<'input> IRGenerator<'input> {
     }
 }
 
-fn translate_expression<'input>(
-    bcx: &mut FunctionBuilder,
-    expression: &ast::Expression<'input>,
-) -> Result<Variable, CompilerError<'input>> {
-    match expression {
-        ast::Expression::ConstantExpression { value, .. } => match value {
-            value::Constant::Integer(i) => {
-                let v = new_variable();
+impl<'input> FunctionTranslator<'input> {
+    pub fn init(&mut self, scope: &st::Scope<'input>) -> Result<(), CompilerError<'static>> {
+        let main_block = self.bcx.create_block();
+        self.bcx.switch_to_block(main_block);
 
-                bcx.declare_var(v, types::I64);
+        self.define_variables(scope)?;
 
-                let tmp = bcx.ins().iconst(types::I64, *i);
-                bcx.def_var(v, tmp);
-
-                Ok(v)
-            }
-            _ => unimplemented!(),
-        },
-
-        ast::Expression::BinaryExpression {
-            operator,
-            left,
-            right,
-            ..
-        } => match operator {
-            ast::BinaryOperator::Addition => {
-                let left = translate_expression(bcx, left)?;
-                let right = translate_expression(bcx, right)?;
-
-                let v = new_variable();
-
-                bcx.declare_var(v, types::I64);
-
-                let left = bcx.use_var(left);
-                let right = bcx.use_var(right);
-
-                let tmp = bcx.ins().iadd(left, right);
-                bcx.def_var(v, tmp);
-
-                Ok(v)
-            }
-            _ => unimplemented!(),
-        },
-
-        _ => unreachable!(),
-    }
-}
-
-fn put_return<'input>(
-    bcx: &mut FunctionBuilder,
-    expression: Option<&ast::Expression<'input>>,
-) -> Result<(), CompilerError<'input>> {
-    let return_block = bcx.create_block();
-    bcx.switch_to_block(return_block);
-
-    let v = if let Some(expression) = expression {
-        translate_expression(bcx, expression)?
-    } else {
-        let v = new_variable();
-
-        bcx.declare_var(v, types::I64);
-
-        let tmp = bcx.ins().iconst(types::I64, 0); // return undefined
-        bcx.def_var(v, tmp);
-
-        v
-    };
-
-    let r = bcx.use_var(v);
-    bcx.ins().return_(&[r]);
-
-    bcx.seal_block(return_block);
-
-    Ok(())
-}
-
-fn visit_statement<'input>(
-    bcx: &mut FunctionBuilder,
-    statement: &ast::Statement<'input>,
-) -> Result<(), CompilerError<'input>> {
-    match statement {
-        ast::Statement::ReturnStatement { expression, .. } => {
-            put_return(bcx, expression.as_ref())?;
+        self.visit_statements(scope.statements)?;
+        if scope.kind == st::ScopeKind::Global {
+            self.put_return(None)?;
         }
 
-        _ => {}
+        self.bcx.seal_block(main_block);
+
+        Ok(())
     }
 
-    Ok(())
-}
+    fn translate_expression(
+        &mut self,
+        expression: &ast::Expression<'input>,
+    ) -> Result<Variable, CompilerError<'static>> {
+        match expression {
+            ast::Expression::ConstantExpression { value, .. } => match value {
+                value::Constant::Integer(i) => {
+                    let v = new_variable();
 
-fn visit_statements<'input>(
-    bcx: &mut FunctionBuilder,
-    statements: &[ast::Statement<'input>],
-) -> Result<(), CompilerError<'input>> {
-    for statement in statements.iter() {
-        visit_statement(bcx, statement)?;
+                    self.bcx.declare_var(v, types::I64);
+
+                    let tmp = self.bcx.ins().iconst(types::I64, *i);
+                    self.bcx.def_var(v, tmp);
+
+                    Ok(v)
+                }
+                _ => unimplemented!(),
+            },
+
+            ast::Expression::BinaryExpression {
+                operator,
+                left,
+                right,
+                ..
+            } => match operator {
+                ast::BinaryOperator::Addition => {
+                    let left = self.translate_expression(left)?;
+                    let right = self.translate_expression(right)?;
+
+                    let v = new_variable();
+
+                    self.bcx.declare_var(v, types::I64);
+
+                    let left = self.bcx.use_var(left);
+                    let right = self.bcx.use_var(right);
+
+                    let tmp = self.bcx.ins().iadd(left, right);
+                    self.bcx.def_var(v, tmp);
+
+                    Ok(v)
+                }
+                _ => unimplemented!(),
+            },
+
+            _ => unreachable!(),
+        }
     }
 
-    Ok(())
+    fn define_variables(
+        &mut self,
+        scope: &st::Scope<'input>,
+    ) -> Result<(), CompilerError<'static>> {
+        for variable_id in scope.variables.values() {
+            let variable = self.symbol_table.variable(variable_id.to_owned());
+
+            let v = new_variable();
+
+            match variable.kind.as_ref().unwrap() {
+                value::VariableKind::Function { .. } => {}
+                value::VariableKind::Undefined => {}
+                value::VariableKind::Null => {}
+                value::VariableKind::Number => {
+                    self.bcx.declare_var(v, types::I64);
+
+                    self.variable_map.insert(variable_id.to_owned(), v);
+                }
+
+                _ => {
+                    dbg!(&variable.kind.as_ref().unwrap());
+                    unimplemented!()
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn put_return(
+        &mut self,
+        expression: Option<&ast::Expression<'input>>,
+    ) -> Result<(), CompilerError<'static>> {
+        let return_block = self.bcx.create_block();
+        self.bcx.switch_to_block(return_block);
+
+        let v = if let Some(expression) = expression {
+            self.translate_expression(expression)?
+        } else {
+            let v = new_variable();
+
+            self.bcx.declare_var(v, types::I64);
+
+            let tmp = self.bcx.ins().iconst(types::I64, 0); // return undefined
+            self.bcx.def_var(v, tmp);
+
+            v
+        };
+
+        let r = self.bcx.use_var(v);
+        self.bcx.ins().return_(&[r]);
+
+        self.bcx.seal_block(return_block);
+
+        Ok(())
+    }
+
+    fn visit_statement(
+        &mut self,
+        statement: &ast::Statement<'input>,
+    ) -> Result<(), CompilerError<'static>> {
+        match statement {
+            ast::Statement::ReturnStatement { expression, .. } => {
+                self.put_return(expression.as_ref())?;
+            }
+
+            _ => {}
+        }
+
+        Ok(())
+    }
+
+    fn visit_statements(
+        &mut self,
+        statements: &[ast::Statement<'input>],
+    ) -> Result<(), CompilerError<'static>> {
+        for statement in statements.iter() {
+            self.visit_statement(statement)?;
+        }
+
+        Ok(())
+    }
 }
