@@ -28,12 +28,17 @@ pub enum BinaryOperator {
 
 #[derive(Clone, Debug)]
 pub enum VariableIdentifier<'input> {
-    Identifier(&'input str),
+    Identifier {
+        location: (usize, usize),
+        identifier: &'input str,
+    },
     Index {
+        location: (usize, usize),
         base: Box<VariableIdentifier<'input>>,
         index: Box<Expression<'input>>,
     },
     Property {
+        location: (usize, usize),
         base: Box<VariableIdentifier<'input>>,
         property: &'input str,
     },
@@ -41,9 +46,10 @@ pub enum VariableIdentifier<'input> {
 
 #[derive(Clone, Debug)]
 pub struct VariableDefinition<'input> {
-    pub is_writable: bool,
+    pub location: (usize, usize),
     pub identifier: &'input str,
     pub kind: Option<VariableKind>,
+    pub is_writable: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -57,11 +63,12 @@ pub enum Statement<'input> {
         expression: Expression<'input>,
     },
     DefinitionStatement {
-        variable: VariableDefinition<'input>,
+        location: (usize, usize),
+        definition: VariableDefinition<'input>,
         expression: Option<Expression<'input>>,
     },
     FunctionStatement {
-        variable: VariableDefinition<'input>,
+        definition: VariableDefinition<'input>,
         parameters: Vec<VariableDefinition<'input>>,
         statements: Vec<Statement<'input>>,
     },
@@ -75,24 +82,30 @@ pub enum Expression<'input> {
         value: Constant<'input>,
     },
     VariableExpression {
+        location: (usize, usize),
         identifier: VariableIdentifier<'input>,
     },
     CallExpression {
+        location: (usize, usize),
         identifier: VariableIdentifier<'input>,
         arguments: Vec<Expression<'input>>,
     },
     CommaExpression {
+        location: (usize, usize),
         expressions: Vec<Expression<'input>>,
     },
     AssignmentExpression {
+        location: (usize, usize),
         identifier: VariableIdentifier<'input>,
         expression: Box<Expression<'input>>,
     },
     UnaryExpression {
+        location: (usize, usize),
         operator: UnaryOperator,
         expression: Box<Expression<'input>>,
     },
     BinaryExpression {
+        location: (usize, usize),
         operator: BinaryOperator,
         left: Box<Expression<'input>>,
         right: Box<Expression<'input>>,

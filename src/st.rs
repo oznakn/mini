@@ -94,26 +94,27 @@ impl<'input> SymbolTable<'input> {
     fn add_variable(
         &mut self,
         scope: NodeId,
-        name: &'input str,
         definition: &'input ast::VariableDefinition<'input>,
     ) -> Result<(), CompilerError<'input>> {
         let scope_obj = self.scope_arena.get_mut(scope).unwrap();
 
-        if scope_obj.variables.contains_key(name) {
-            return Err(CompilerError::VariableAlreadyDefined(name));
+        if scope_obj.variables.contains_key(definition.identifier) {
+            return Err(CompilerError::VariableAlreadyDefined(definition.identifier));
         }
 
         let variable_entry = self.variable_arena.len();
         self.variable_arena.push(Variable {
             id: variable_entry,
             scope,
-            name,
+            name: definition.identifier,
             definition,
             kinds: IndexSet::new(),
             assignments: Vec::new(),
             calls: Vec::new(),
         });
-        scope_obj.variables.insert(name, variable_entry);
+        scope_obj
+            .variables
+            .insert(definition.identifier, variable_entry);
 
         Ok(())
     }
@@ -124,25 +125,23 @@ impl<'input> SymbolTable<'input> {
         for statement in scope_obj.statements {
             match statement {
                 ast::Statement::FunctionStatement {
-                    variable,
+                    definition,
                     parameters,
                     statements,
+                    ..
                 } => {
-                    self.add_variable(scope, variable.identifier, &variable)?;
+                    self.add_variable(scope, &definition)?;
 
                     let new_scope = self.new_scope(statements)?;
                     for parameter in parameters {
-                        self.add_variable(new_scope, parameter.identifier, parameter)?;
+                        self.add_variable(new_scope, parameter)?;
                     }
 
                     self.add_scope(scope, new_scope)?;
                 }
 
-                ast::Statement::DefinitionStatement {
-                    expression: _,
-                    variable,
-                } => {
-                    self.add_variable(scope, variable.identifier, variable)?;
+                ast::Statement::DefinitionStatement { definition, .. } => {
+                    self.add_variable(scope, definition)?;
                 }
 
                 _ => {}
@@ -177,7 +176,9 @@ impl<'input> SymbolTable<'input> {
         identifier: &'input ast::VariableIdentifier<'input>,
     ) -> Result<NodeId, CompilerError<'input>> {
         match identifier {
-            ast::VariableIdentifier::Identifier(s) => self.get_variable(scope, s),
+            ast::VariableIdentifier::Identifier { identifier, .. } => {
+                self.get_variable(scope, identifier)
+            }
             _ => unimplemented!(),
         }
     }
@@ -190,7 +191,7 @@ impl<'input> SymbolTable<'input> {
         match expression {
             ast::Expression::ConstantExpression { value, .. } => Ok(value.get_kind()),
 
-            ast::Expression::VariableExpression { identifier } => {
+            ast::Expression::VariableExpression { identifier, .. } => {
                 let variable = self.get_variable_identifier(scope, identifier)?;
                 let variable_obj = self.variable_arena.get(variable).unwrap();
 
@@ -201,7 +202,7 @@ impl<'input> SymbolTable<'input> {
                 Err(CompilerError::VariableTypeCannotBeInfered)
             }
 
-            ast::Expression::CommaExpression { expressions } => {
+            ast::Expression::CommaExpression { expressions, .. } => {
                 if expressions.len() == 0 {
                     return Ok(ast::VariableKind::Undefined);
                 }
@@ -213,30 +214,25 @@ impl<'input> SymbolTable<'input> {
                 self.get_expression_kind(scope, expressions.get(0).unwrap())
             }
 
-            ast::Expression::AssignmentExpression {
-                identifier: _,
-                expression,
-            } => self.get_expression_kind(scope, expression),
+            ast::Expression::AssignmentExpression { expression, .. } => {
+                self.get_expression_kind(scope, expression)
+            }
 
-            ast::Expression::BinaryExpression {
-                operator: _,
-                left,
-                right,
-            } => {
+            ast::Expression::BinaryExpression { left, right, .. } => {
                 let left_kind = self.get_expression_kind(scope, left)?;
                 let right_kind = self.get_expression_kind(scope, right)?;
 
                 Ok(left_kind.operation_result(&right_kind))
             }
 
-            ast::Expression::UnaryExpression {
-                operator: _,
-                expression,
-            } => self.get_expression_kind(scope, &expression),
+            ast::Expression::UnaryExpression { expression, .. } => {
+                self.get_expression_kind(scope, &expression)
+            }
 
             ast::Expression::CallExpression {
                 identifier,
                 arguments,
+                ..
             } => {
                 for argument in arguments {
                     self.get_expression_kind(scope, argument)?;
@@ -246,10 +242,9 @@ impl<'input> SymbolTable<'input> {
                 let variable_obj = self.variable_arena.get(variable).unwrap();
 
                 match variable_obj.definition.kind.as_ref().unwrap() {
-                    ast::VariableKind::Function {
-                        parameters: _,
-                        return_kind,
-                    } => Ok(return_kind.as_ref().to_owned()),
+                    ast::VariableKind::Function { return_kind, .. } => {
+                        Ok(return_kind.as_ref().to_owned())
+                    }
                     _ => return Err(CompilerError::InvalidFunctionCall),
                 }
             }
@@ -264,10 +259,7 @@ impl<'input> SymbolTable<'input> {
         expression: &'input ast::Expression<'input>,
     ) -> Result<(), CompilerError<'input>> {
         match expression {
-            ast::Expression::AssignmentExpression {
-                identifier,
-                expression: _,
-            } => {
+            ast::Expression::AssignmentExpression { identifier, .. } => {
                 let variable = self.get_variable_identifier(scope, identifier)?;
                 let variable_obj = self.variable_arena.get_mut(variable).unwrap();
 
@@ -281,6 +273,7 @@ impl<'input> SymbolTable<'input> {
             ast::Expression::CallExpression {
                 identifier,
                 arguments,
+                ..
             } => {
                 let variable = self.get_variable_identifier(scope, identifier)?;
                 let variable_obj = self.variable_arena.get_mut(variable).unwrap();
@@ -301,6 +294,21 @@ impl<'input> SymbolTable<'input> {
         match statement {
             ast::Statement::ExpressionStatement { expression } => {
                 self.build_variable_fields_for_expression(scope, expression)?;
+            }
+
+            ast::Statement::DefinitionStatement {
+                definition,
+                expression,
+                ..
+            } => {
+                let variable = self.get_variable(scope, definition.identifier)?;
+                let variable_obj = self.variable_arena.get_mut(variable).unwrap();
+
+                if let Some(expression) = expression {
+                    variable_obj.assignments.push(expression);
+
+                    self.build_variable_fields_for_expression(scope, expression)?;
+                }
             }
 
             _ => {}
@@ -339,6 +347,8 @@ impl<'input> SymbolTable<'input> {
         variable: NodeId,
     ) -> Result<Vec<ast::VariableKind>, CompilerError<'input>> {
         let variable_obj = self.variable_arena.get(variable).unwrap();
+
+        dbg!(&variable_obj.assignments);
 
         let kind_results = variable_obj
             .assignments
@@ -384,11 +394,7 @@ impl<'input> SymbolTable<'input> {
     fn check_types_for_variable(&self, variable: NodeId) -> Result<(), CompilerError<'input>> {
         let variable_obj = self.variable_arena.get(variable).unwrap();
         for kind in &variable_obj.kinds {
-            if let ast::VariableKind::Function {
-                parameters,
-                return_kind: _,
-            } = kind
-            {
+            if let ast::VariableKind::Function { parameters, .. } = kind {
                 for arguments in &variable_obj.calls {
                     if arguments.len() != parameters.len() {
                         return Err(CompilerError::InvalidNumberOfArguments(

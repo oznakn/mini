@@ -90,8 +90,9 @@ FunctionReturnKind: ast::VariableKind = {
 };
 
 FunctionStatement: ast::Statement<'input> = {
-    "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" <return_kind:(":" <FunctionReturnKind>)?> <statements:Body> => ast::Statement::FunctionStatement {
-        variable: ast::VariableDefinition {
+    <l1:@L> "function" <identifier:Identifier> "(" <parameters:CommaList<VariableDefinition>> ")" <return_kind:(":" <FunctionReturnKind>)?> <l2:@R> <statements:Body> => ast::Statement::FunctionStatement {
+        definition: ast::VariableDefinition {
+            location: (l1, l2),
             identifier,
             kind: Some(ast::VariableKind::Function {
                 return_kind: Box::new(return_kind.or_else(|| Some(ast::VariableKind::Undefined)).unwrap()),
@@ -113,12 +114,13 @@ DefinitionStatementPrefix = {
 };
 
 DefinitionStatement: ast::Statement<'input> = {
-    <prefix:DefinitionStatementPrefix> <definition:VariableDefinitionOptionalKind> <e:("=" <Expression>)?> ";" => {
+    <l1:@L> <prefix:DefinitionStatementPrefix> <definition:VariableDefinitionOptionalKind> <e:("=" <Expression>)?> ";" <l2:@R> => {
         let mut definition = definition;
         definition.is_writable = prefix == "let";
 
         ast::Statement::DefinitionStatement {
-            variable: definition,
+            location: (l1, l2),
+            definition,
             expression: e,
         }
     },
@@ -130,18 +132,20 @@ Expression: ast::Expression<'input> = {
 };
 
 AssignmentExpression: ast::Expression<'input> =
-    <identifier:VariableIdentifier> "=" <e:Expression> => ast::Expression::AssignmentExpression {
+    <l1:@L> <identifier:VariableIdentifier> "=" <e:Expression> <l2:@R> => ast::Expression::AssignmentExpression {
+        location: (l1, l2),
         identifier,
         expression: Box::new(e),
     };
 
-Term<L, O, R>: ast::Expression<'input> = {
-    <left:L> <operator:O> <right:R> => ast::Expression::BinaryExpression {
+Term<S, O, E>: ast::Expression<'input> = {
+    <l1:@L> <left:S> <operator:O> <right:E> <l2:@R> => ast::Expression::BinaryExpression {
+        location: (l1, l2),
         left: Box::new(left),
         operator,
         right: Box::new(right),
     },
-    R,
+    E,
 };
 
 BinaryExpression = LogicalTerm4;
@@ -151,16 +155,31 @@ LogicalTerm3 = Term<LogicalTerm3, LogicalOperator3, LogicalTerm2>;
 LogicalTerm2 = Term<LogicalTerm2, LogicalOperator2, LogicalTerm1>;
 LogicalTerm1 = Term<LogicalTerm1, LogicalOperator1, AddTerm>;
 AddTerm = Term<AddTerm, AddOperator, MulTerm>;
-MulTerm = Term<MulTerm, MulOperator, Factor>;
+MulTerm = Term<MulTerm, MulOperator, UnaryTerm>;
 
-Factor: ast::Expression<'input> = {
-    <operator:UnaryOperator> <e:Factor> => ast::Expression::UnaryExpression {
+UnaryTerm: ast::Expression<'input> = {
+    <l1:@L> <operator:UnaryOperator> <e:UnaryTerm> <l2:@R> => ast::Expression::UnaryExpression {
+        location: (l1, l2),
         operator,
         expression: Box::new(e),
     },
-    <l1:@L> <value:Constant> <l2:@R> => ast::Expression::ConstantExpression { location: (l1, l2), value },
-    <identifier:VariableIdentifier> => ast::Expression::VariableExpression { identifier },
-    <identifier:VariableIdentifier> "(" <arguments:CommaList<Expression>> ")" => ast::Expression::CallExpression { identifier, arguments },
+    Factor,
+};
+
+Factor: ast::Expression<'input> = {
+    <l1:@L> <value:Constant> <l2:@R> => ast::Expression::ConstantExpression {
+        location: (l1, l2),
+        value,
+    },
+    <l1:@L> <identifier:VariableIdentifier> <l2:@R> => ast::Expression::VariableExpression {
+        location: (l1, l2),
+        identifier
+    },
+    <l1:@L> <identifier:VariableIdentifier> "(" <arguments:CommaList<Expression>> ")"  <l2:@R> => ast::Expression::CallExpression {
+        location: (l1, l2),
+        identifier,
+        arguments
+    },
     "(" <e:Expression> ")" => e,
 };
 
@@ -204,7 +223,8 @@ LogicalOperator4: ast::BinaryOperator = {
 };
 
 VariableDefinition: ast::VariableDefinition<'input> = {
-    <identifier:Identifier> ":" <kind:VariableKind> => ast::VariableDefinition {
+    <l1:@L> <identifier:Identifier> ":" <kind:VariableKind> <l2:@R> => ast::VariableDefinition {
+        location: (l1, l2),
         identifier,
         kind: Some(kind),
         is_writable: true,
@@ -213,7 +233,8 @@ VariableDefinition: ast::VariableDefinition<'input> = {
 
 VariableDefinitionOptionalKind: ast::VariableDefinition<'input> = {
     VariableDefinition,
-    <identifier:Identifier> => ast::VariableDefinition {
+    <l1:@L> <identifier:Identifier> <l2:@R> => ast::VariableDefinition {
+        location: (l1, l2),
         identifier,
         kind: None,
         is_writable: true,
@@ -221,12 +242,20 @@ VariableDefinitionOptionalKind: ast::VariableDefinition<'input> = {
 }
 
 VariableIdentifier: ast::VariableIdentifier<'input> = {
-    <identifier:Identifier> => ast::VariableIdentifier::Identifier(identifier),
-    <base:VariableIdentifier> "." <property:Identifier> => ast::VariableIdentifier::Property {
+    <l1:@L> <identifier:Identifier> <l2:@R> => ast::VariableIdentifier::Identifier {
+        location: (l1, l2),
+        identifier,
+    },
+    <l1:@L> <base:VariableIdentifier> "." <property:Identifier> <l2:@R> => ast::VariableIdentifier::Property {
+        location: (l1, l2),
         base: Box::new(base),
         property,
     },
-    <base:VariableIdentifier> "[" <index:Expression> "]" => ast::VariableIdentifier::Index { base: Box::new(base), index: Box::new(index) },
+    <l1:@L> <base:VariableIdentifier> "[" <index:Expression> "]" <l2:@R> => ast::VariableIdentifier::Index {
+        location: (l1, l2),
+        base: Box::new(base),
+        index: Box::new(index),
+    },
 };
 
 Identifier: &'input str =
