@@ -143,7 +143,7 @@ impl<'input> IRGenerator<'input> {
             definition: None,
             kind: Some(ast::FunctionKind {
                 parameters: Vec::new(),
-                return_kind: value::VariableKind::Number,
+                return_kind: Box::new(value::VariableKind::Number),
             }),
             returns: Vec::new(),
         };

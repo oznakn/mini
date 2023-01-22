@@ -420,7 +420,7 @@ impl<'input> SymbolTable<'input> {
 
                 match variable.kind.as_ref().unwrap() {
                     ast::VariableKind::Function(function_kind) => {
-                        Ok(function_kind.return_kind.to_owned())
+                        Ok(function_kind.return_kind.as_ref().to_owned())
                     }
                     _ => {
                         return Err(CompilerError::InvalidFunctionCall(
@@ -448,7 +448,7 @@ impl<'input> SymbolTable<'input> {
 
         let mut curr_kind = function.kind.as_ref().map_or_else(
             || ast::VariableKind::Undefined,
-            |v| v.return_kind.to_owned(),
+            |v| v.return_kind.as_ref().to_owned(),
         );
 
         for kind in kind_results {
@@ -473,7 +473,6 @@ impl<'input> SymbolTable<'input> {
     fn get_kind_from_assignments(
         &self,
         variable_id: NodeId,
-        base_kind: Option<ast::VariableKind>,
     ) -> Result<ast::VariableKind, CompilerError<'input>> {
         let variable = self.variable_arena.get(variable_id).unwrap();
 
@@ -482,6 +481,8 @@ impl<'input> SymbolTable<'input> {
             .iter()
             .map(|a| self.get_expression_kind(variable.scope_id, a))
             .collect::<Vec<_>>();
+
+        let base_kind = variable.definition.kind.clone();
 
         if base_kind.is_none()
             && (kind_results.is_empty() || kind_results.first().unwrap().is_err())
@@ -521,7 +522,7 @@ impl<'input> SymbolTable<'input> {
             let return_kind = self.get_return_kind_from_returns(function_id)?;
 
             let kind = value::FunctionKind {
-                return_kind,
+                return_kind: Box::new(return_kind),
                 parameters: function_kind.parameters.clone(),
             };
 
@@ -535,8 +536,7 @@ impl<'input> SymbolTable<'input> {
         &mut self,
         variable_id: NodeId,
     ) -> Result<(), CompilerError<'input>> {
-        let variable = self.variable_arena.get(variable_id).unwrap();
-        let kind = self.get_kind_from_assignments(variable_id, variable.definition.kind.clone())?;
+        let kind = self.get_kind_from_assignments(variable_id)?;
 
         let variable = self.variable_arena.get_mut(variable_id).unwrap();
         variable.kind = Some(kind);
