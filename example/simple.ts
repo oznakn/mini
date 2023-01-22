@@ -1,8 +1,6 @@
 function x(): number {
-    let a: number = 100;
-    a = a - 70;
-    return a * 3;
+    return 10;
 }
 
-// const b = x();
+const b: number = x();
 

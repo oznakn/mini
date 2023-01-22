@@ -1,6 +1,7 @@
-#include <stdio.h>
-
+int hello_world(void) {
+    return 0;
+}
 int main(void) {
-    puts("Hello\n");
+    hello_world();
     return 0;
 }

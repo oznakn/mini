@@ -61,7 +61,7 @@ impl<'input> SymbolTable<'input> {
         let mut symbol_table = SymbolTable {
             main_def: ast::VariableDefinition {
                 location: (0, 0),
-                identifier: "name".as_ref(),
+                identifier: "main".as_ref(),
                 kind: ast::VariableKind::Function {
                     parameters: Vec::new(),
                     return_kind: Box::new(value::VariableKind::Number),

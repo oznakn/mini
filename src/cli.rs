@@ -22,7 +22,7 @@ fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
 
     let mut ir_generator = gen::IRGenerator::new(
         &symbol_table,
-        "aarch64-apple-darwin",
+        "x86_64-apple-darwin",
         "foo",
         matches.is_present("optimize"),
     )

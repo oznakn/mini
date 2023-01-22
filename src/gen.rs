@@ -2,6 +2,7 @@ use cranelift_codegen::entity::EntityRef;
 use cranelift_codegen::ir::condcodes::IntCC;
 use cranelift_codegen::ir::*;
 use cranelift_codegen::isa;
+use cranelift_codegen::isa::CallConv;
 use cranelift_codegen::settings;
 use cranelift_codegen::settings::Configurable;
 use cranelift_codegen::Context;
@@ -28,12 +29,13 @@ pub struct IRGenerator<'input> {
     pub builder_context: FunctionBuilderContext,
 }
 
-pub struct FunctionTranslator<'input> {
+pub struct FunctionTranslator<'input, 'short> {
     pub symbol_table: &'input st::SymbolTable<'input>,
+    pub module: &'short mut ObjectModule,
     pub scope_id: st::NodeId,
 
     pub variable_map: IndexMap<st::NodeId, Variable>,
-    pub bcx: FunctionBuilder<'input>,
+    pub bcx: FunctionBuilder<'short>,
 }
 
 fn new_variable() -> Variable {
@@ -109,6 +111,7 @@ impl<'input> IRGenerator<'input> {
             scope_id: function.function_scope_id,
             variable_map: IndexMap::new(),
             bcx: FunctionBuilder::new(&mut ctx.func, &mut self.builder_context),
+            module: &mut self.module,
         };
 
         translator
@@ -127,6 +130,8 @@ impl<'input> IRGenerator<'input> {
         self.module
             .define_function(func_id, &mut ctx)
             .map_err(|err| CompilerError::CodeGenError(err.to_string()))?;
+
+        println!("{}", ctx.func.display());
 
         for f_id in scope.functions.iter() {
             let f = self.symbol_table.function(f_id.to_owned());
@@ -151,7 +156,7 @@ impl<'input> IRGenerator<'input> {
     }
 }
 
-impl<'input> FunctionTranslator<'input> {
+impl<'input, 'short> FunctionTranslator<'input, 'short> {
     pub fn init(&mut self, scope: &'input st::Scope<'input>) -> Result<(), CompilerError<'input>> {
         let main_block = self.bcx.create_block();
         self.bcx.switch_to_block(main_block);
@@ -212,6 +217,24 @@ impl<'input> FunctionTranslator<'input> {
                 self.bcx.def_var(v, data);
 
                 Ok(self.bcx.use_var(v))
+            }
+
+            ast::Expression::CallExpression { .. } => {
+                let mut sig = self.module.make_signature();
+                sig.call_conv = CallConv::SystemV;
+                sig.returns.push(AbiParam::new(types::I64));
+
+                let callee = self
+                    .module
+                    .declare_function("hello_world".as_ref(), Linkage::Import, &sig)
+                    .expect("problem declaring function");
+
+                let local_callee = self.module.declare_func_in_func(callee, &mut self.bcx.func);
+
+                let arg_values = Vec::new();
+                self.bcx.ins().call(local_callee, &arg_values);
+
+                Ok(self.bcx.ins().iconst(types::I64, 0))
             }
 
             ast::Expression::BinaryExpression {
