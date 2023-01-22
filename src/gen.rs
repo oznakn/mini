@@ -80,35 +80,17 @@ impl<'input> IRGenerator<'input> {
         })
     }
 
-    fn init_scope(&mut self, scope: &st::Scope<'input>) -> Result<(), CompilerError<'input>> {
-        let func_name = match scope.kind {
-            st::ScopeKind::Function => {
-                let variable = self.symbol_table.variable(scope.variable_id.unwrap());
+    fn init_function(
+        &mut self,
+        function: &st::Function<'input>,
+    ) -> Result<(), CompilerError<'input>> {
+        let scope = self.symbol_table.scope(function.function_scope_id);
 
-                variable.name
-            }
-            st::ScopeKind::Global => "main".as_ref(),
-            _ => unreachable!(),
-        };
-
-        let func_kind = match scope.kind {
-            st::ScopeKind::Function => {
-                let variable = self.symbol_table.variable(scope.variable_id.unwrap());
-
-                variable.kind.as_ref().unwrap().clone()
-            }
-            st::ScopeKind::Global => ast::VariableKind::Function {
-                parameters: Vec::new(),
-                return_kind: Box::new(ast::VariableKind::Number),
-            },
-            _ => unreachable!(),
-        };
-
-        let signature = func_kind.get_signature();
+        let signature = function.kind.as_ref().unwrap().get_signature();
 
         let func_id = self
             .module
-            .declare_function(func_name, Linkage::Export, &signature)
+            .declare_function(function.name, Linkage::Export, &signature)
             .unwrap();
 
         let mut ctx = Context::for_function(Function::with_name_signature(
@@ -118,7 +100,7 @@ impl<'input> IRGenerator<'input> {
 
         let mut translator = FunctionTranslator {
             symbol_table: self.symbol_table,
-            scope_id: scope.id,
+            scope_id: function.function_scope_id,
             variable_map: IndexMap::new(),
             bcx: FunctionBuilder::new(&mut ctx.func, &mut self.builder_context),
         };
@@ -142,9 +124,10 @@ impl<'input> IRGenerator<'input> {
                 CompilerError::CodeGenError(err.to_string())
             })?;
 
-        for s_id in scope.scopes.iter() {
-            let s = self.symbol_table.scope(s_id.to_owned());
-            self.init_scope(s)?;
+        for f_id in scope.functions.iter() {
+            let f = self.symbol_table.function(f_id.to_owned());
+
+            self.init_function(f)?;
         }
 
         Ok(())
@@ -153,7 +136,17 @@ impl<'input> IRGenerator<'input> {
     pub fn init(&mut self) -> Result<(), CompilerError<'input>> {
         let scope = self.symbol_table.scope(self.symbol_table.global_scope);
 
-        self.init_scope(scope)?;
+        let main_function = st::Function {
+            id: 1000,
+            function_scope_id: scope.id,
+            name: "main".as_ref(),
+            kind: Some(value::VariableKind::Function {
+                parameters: Vec::new(),
+                return_kind: Box::new(value::VariableKind::Number),
+            }),
+            returns: Vec::new(),
+        };
+        self.init_function(&main_function)?;
 
         Ok(())
     }
