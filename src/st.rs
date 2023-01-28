@@ -68,11 +68,11 @@ impl<'input> SymbolTable<'input> {
         let global_scope =
             symbol_table.create_scope(ScopeKind::Global, None, &program.statements)?;
 
-        let main_function = symbol_table.add_variable(global_scope, main_def)?;
+        let main_function = symbol_table.add_variable(&global_scope, main_def)?;
         symbol_table.main_function = Some(main_function);
 
-        symbol_table.set_function_scope(main_function, global_scope);
-        symbol_table.build_scope(global_scope)?;
+        symbol_table.set_function_scope(&main_function, &global_scope);
+        symbol_table.build_scope(&global_scope)?;
 
         symbol_table.visit_scopes()?;
 
@@ -83,30 +83,30 @@ impl<'input> SymbolTable<'input> {
         self.function_scope_map.iter().map(move |(id, _)| id)
     }
 
-    pub fn scope(&self, scope_id: Index) -> &Scope<'input> {
-        self.scope_arena.get(scope_id).unwrap()
+    pub fn scope(&self, scope_id: &Index) -> &Scope<'input> {
+        self.scope_arena.get(*scope_id).unwrap()
     }
 
-    pub fn scope_mut(&mut self, scope_id: Index) -> &mut Scope<'input> {
-        self.scope_arena.get_mut(scope_id).unwrap()
+    pub fn scope_mut(&mut self, scope_id: &Index) -> &mut Scope<'input> {
+        self.scope_arena.get_mut(*scope_id).unwrap()
     }
 
-    pub fn variable(&self, variable_id: Index) -> &Variable<'input> {
-        self.variable_arena.get(variable_id).unwrap()
+    pub fn variable(&self, variable_id: &Index) -> &Variable<'input> {
+        self.variable_arena.get(*variable_id).unwrap()
     }
 
-    pub fn variable_mut(&mut self, variable_id: Index) -> &mut Variable<'input> {
-        self.variable_arena.get_mut(variable_id).unwrap()
+    pub fn variable_mut(&mut self, variable_id: &Index) -> &mut Variable<'input> {
+        self.variable_arena.get_mut(*variable_id).unwrap()
     }
 
-    pub fn function_scope(&self, function_id: Index) -> &Scope<'input> {
-        let scope_id = self.function_scope_map.get(&function_id).unwrap();
+    pub fn function_scope(&self, function_id: &Index) -> &Scope<'input> {
+        let scope_id = self.function_scope_map.get(function_id).unwrap();
 
-        self.scope(*scope_id)
+        self.scope(scope_id)
     }
 
-    fn set_function_scope(&mut self, function_id: Index, scope_id: Index) {
-        self.function_scope_map.insert(function_id, scope_id);
+    fn set_function_scope(&mut self, function_id: &Index, scope_id: &Index) {
+        self.function_scope_map.insert(*function_id, *scope_id);
     }
 
     pub fn expression_kind(
@@ -133,10 +133,10 @@ impl<'input> SymbolTable<'input> {
     fn set_definition_ref(
         &mut self,
         definition: &'input ast::VariableDefinition<'input>,
-        variable_id: Index,
+        variable_id: &Index,
     ) {
         self.definition_ref_map
-            .insert(ByAddress(definition), variable_id);
+            .insert(ByAddress(definition), *variable_id);
     }
 
     pub fn identifier_ref(&self, identifier: &'input ast::VariableIdentifier<'input>) -> &Index {
@@ -146,10 +146,10 @@ impl<'input> SymbolTable<'input> {
     fn set_identifier_ref(
         &mut self,
         identifier: &'input ast::VariableIdentifier<'input>,
-        variable_id: Index,
+        variable_id: &Index,
     ) {
         self.identifier_ref_map
-            .insert(ByAddress(identifier), variable_id);
+            .insert(ByAddress(identifier), *variable_id);
     }
 }
 
@@ -172,7 +172,7 @@ impl<'input> SymbolTable<'input> {
 
     fn add_variable(
         &mut self,
-        scope_id: Index,
+        scope_id: &Index,
         definition: &'input ast::VariableDefinition<'input>,
     ) -> Result<Index, CompilerError<'input>> {
         let scope = self.scope(scope_id);
@@ -183,7 +183,7 @@ impl<'input> SymbolTable<'input> {
 
         let variable_id = self.variable_arena.insert(Variable { definition });
 
-        self.set_definition_ref(definition, variable_id);
+        self.set_definition_ref(definition, &variable_id);
 
         let scope = self.scope_mut(scope_id);
         scope.variables.insert(definition.name, variable_id);
@@ -191,7 +191,7 @@ impl<'input> SymbolTable<'input> {
         Ok(variable_id)
     }
 
-    fn build_scope(&mut self, scope_id: Index) -> Result<(), CompilerError<'input>> {
+    fn build_scope(&mut self, scope_id: &Index) -> Result<(), CompilerError<'input>> {
         let scope = self.scope(scope_id);
 
         for statement in scope.statements {
@@ -204,13 +204,13 @@ impl<'input> SymbolTable<'input> {
                 } => {
                     let variable_id = self.add_variable(scope_id, &definition)?;
                     let function_scope_id =
-                        self.create_scope(ScopeKind::Function, Some(scope_id), statements)?;
+                        self.create_scope(ScopeKind::Function, Some(*scope_id), statements)?;
 
-                    self.set_function_scope(variable_id, function_scope_id);
-                    self.build_scope(function_scope_id)?;
+                    self.set_function_scope(&variable_id, &function_scope_id);
+                    self.build_scope(&function_scope_id)?;
 
                     for parameter in parameters {
-                        self.add_variable(function_scope_id, parameter)?;
+                        self.add_variable(&function_scope_id, parameter)?;
                     }
                 }
 
@@ -229,7 +229,7 @@ impl<'input> SymbolTable<'input> {
 impl<'input> SymbolTable<'input> {
     pub fn fetch_variable_by_name(
         &self,
-        scope_id: Index,
+        scope_id: &Index,
         name: &'input str,
     ) -> Result<Index, CompilerError<'input>> {
         let scope = self.scope(scope_id);
@@ -238,7 +238,7 @@ impl<'input> SymbolTable<'input> {
             return Ok(variable_id.to_owned());
         }
 
-        if let Some(parent) = scope.parent {
+        if let Some(parent) = scope.parent.as_ref() {
             return self.fetch_variable_by_name(parent, name);
         }
 
@@ -247,7 +247,7 @@ impl<'input> SymbolTable<'input> {
 
     pub fn fetch_variable_by_identifier(
         &self,
-        scope_id: Index,
+        scope_id: &Index,
         identifier: &'input ast::VariableIdentifier<'input>,
     ) -> Result<Index, CompilerError<'input>> {
         match identifier {
@@ -260,7 +260,7 @@ impl<'input> SymbolTable<'input> {
 
     fn visit_expression(
         &mut self,
-        scope_id: Index,
+        scope_id: &Index,
         expression: &'input ast::Expression<'input>,
     ) -> Result<ast::VariableKind, CompilerError<'input>> {
         if let Some(kind) = self.expression_kind_map.get(&ByAddress(expression)) {
@@ -278,11 +278,11 @@ impl<'input> SymbolTable<'input> {
 
             ast::Expression::VariableExpression { identifier, .. } => {
                 let variable_id = self.fetch_variable_by_identifier(scope_id, identifier)?;
-                let variable = self.variable(variable_id);
+                let variable = self.variable(&variable_id);
 
                 let kind = variable.definition.kind.clone();
 
-                self.set_identifier_ref(identifier, variable_id);
+                self.set_identifier_ref(identifier, &variable_id);
                 self.set_expression_kind(expression, kind.clone());
 
                 Ok(kind)
@@ -325,7 +325,7 @@ impl<'input> SymbolTable<'input> {
                 }
 
                 let variable_id = self.fetch_variable_by_identifier(scope_id, identifier)?;
-                let variable = self.variable(variable_id);
+                let variable = self.variable(&variable_id);
 
                 match &variable.definition.kind {
                     ast::VariableKind::Function { return_kind, .. } => {
@@ -344,7 +344,7 @@ impl<'input> SymbolTable<'input> {
 
     fn visit_statement(
         &mut self,
-        scope_id: Index,
+        scope_id: &Index,
         statement: &'input ast::Statement<'input>,
     ) -> Result<(), CompilerError<'input>> {
         match statement {
@@ -370,7 +370,7 @@ impl<'input> SymbolTable<'input> {
         Ok(())
     }
 
-    fn visit_scope(&mut self, scope_id: Index) -> Result<(), CompilerError<'input>> {
+    fn visit_scope(&mut self, scope_id: &Index) -> Result<(), CompilerError<'input>> {
         let scope = self.scope_mut(scope_id);
 
         for statement in scope.statements {
@@ -384,7 +384,7 @@ impl<'input> SymbolTable<'input> {
         let scopes = self.scope_arena.iter().map(|(i, _)| i).collect::<Vec<_>>();
 
         for scope_id in scopes {
-            self.visit_scope(scope_id)?;
+            self.visit_scope(&scope_id)?;
         }
 
         Ok(())

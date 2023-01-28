@@ -7,7 +7,7 @@ use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine};
 use inkwell::types::BasicTypeEnum;
-use inkwell::values::{BasicValueEnum, PointerValue};
+use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
 use inkwell::OptimizationLevel;
 
 use crate::ast;
@@ -23,7 +23,8 @@ pub struct IRGenerator<'input, 'ctx> {
     module: Module<'ctx>,
     builder: Builder<'ctx>,
 
-    variable_pointers: IndexMap<Index, PointerValue<'ctx>>,
+    functions: IndexMap<Index, (String, FunctionValue<'ctx>)>,
+    variables: IndexMap<Index, PointerValue<'ctx>>,
 }
 
 impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
@@ -41,9 +42,11 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             context,
             module,
             builder: context.create_builder(),
-            variable_pointers: IndexMap::new(),
+            functions: IndexMap::new(),
+            variables: IndexMap::new(),
         };
         ir_generator.init()?;
+        ir_generator.compile()?;
         ir_generator.write_to_file()?;
 
         Ok(())
@@ -88,7 +91,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     ) -> &PointerValue<'ctx> {
         let variable_id = self.symbol_table.definition_ref(definition);
 
-        self.variable_pointers.get(variable_id).unwrap()
+        self.variables.get(variable_id).unwrap()
     }
 
     fn get_pointer_for_identifier(
@@ -97,7 +100,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     ) -> &PointerValue<'ctx> {
         let variable_id = self.symbol_table.identifier_ref(identifier);
 
-        self.variable_pointers.get(variable_id).unwrap()
+        self.variables.get(variable_id).unwrap()
     }
 
     fn convert_kind_to_native(&self, variable_kind: &ast::VariableKind) -> BasicTypeEnum<'ctx> {
@@ -120,7 +123,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
     fn init(&mut self) -> Result<(), CompilerError<'input>> {
         for variable_id in self.symbol_table.functions() {
-            let variable = self.symbol_table.variable(*variable_id);
+            let variable = self.symbol_table.variable(variable_id);
 
             let func_name = if self.symbol_table.main_function.unwrap() == *variable_id {
                 "main".to_owned()
@@ -134,20 +137,47 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         Ok(())
     }
 
+    fn compile(&mut self) -> Result<(), CompilerError<'input>> {
+        let keys = self
+            .functions
+            .iter()
+            .map(|(i, _)| i.to_owned())
+            .collect::<Vec<_>>();
+
+        for function_id in keys {
+            self.visit_function(&function_id)?;
+        }
+
+        Ok(())
+    }
+
     fn init_function(
         &mut self,
         name: &str,
         function_variable_id: Index,
     ) -> Result<(), CompilerError<'input>> {
-        let scope = self.symbol_table.function_scope(function_variable_id);
-
         let fn_type = self.context.i64_type().fn_type(&[], false);
         let fn_value = self.module.add_function(name, fn_type, None);
 
-        let basic_block = self.context.append_basic_block(fn_value, "entry");
+        self.functions
+            .insert(function_variable_id, (name.to_owned(), fn_value));
+
+        Ok(())
+    }
+
+    fn visit_function(
+        &mut self,
+        function_variable_id: &Index,
+    ) -> Result<(), CompilerError<'input>> {
+        let scope = self.symbol_table.function_scope(function_variable_id);
+
+        let (function_name, function) = self.functions.get(function_variable_id).unwrap();
+
+        let basic_block = self.context.append_basic_block(*function, "entry");
         self.builder.position_at_end(basic_block);
 
-        self.define_variables(name, function_variable_id)?;
+        let function_name = function_name.to_owned();
+        self.define_variables(function_name.as_str(), function_variable_id)?;
 
         self.visit_statements(scope.statements)?;
         if scope.kind == st::ScopeKind::Global {
@@ -160,12 +190,12 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     fn define_variables(
         &mut self,
         function_name: &str,
-        function_variable_id: Index,
+        function_variable_id: &Index,
     ) -> Result<(), CompilerError<'input>> {
         let scope = self.symbol_table.function_scope(function_variable_id);
 
         for variable_id in scope.variables.values() {
-            let variable = self.symbol_table.variable(*variable_id);
+            let variable = self.symbol_table.variable(variable_id);
 
             if !variable.is_function() {
                 let alloca = self.builder.build_alloca(
@@ -173,8 +203,53 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                     &format!("{}{}", function_name, variable.definition.name),
                 );
 
-                self.variable_pointers.insert(*variable_id, alloca);
+                self.variables.insert(*variable_id, alloca);
             }
+        }
+
+        Ok(())
+    }
+
+    fn visit_statements(
+        &mut self,
+        statements: &'input [ast::Statement<'input>],
+    ) -> Result<(), CompilerError<'input>> {
+        for statement in statements.iter() {
+            self.visit_statement(statement)?;
+        }
+
+        Ok(())
+    }
+
+    fn visit_statement(
+        &mut self,
+        statement: &'input ast::Statement<'input>,
+    ) -> Result<(), CompilerError<'input>> {
+        match statement {
+            ast::Statement::ReturnStatement { expression, .. } => {
+                self.put_return(expression.as_ref())?;
+            }
+
+            ast::Statement::ExpressionStatement { expression, .. } => {
+                self.translate_expression(expression)?;
+            }
+
+            ast::Statement::DefinitionStatement {
+                definition,
+                expression,
+                ..
+            } => {
+                let ptr = self.get_pointer_for_definition(definition);
+                let v = if let Some(expression) = expression {
+                    self.translate_expression(expression)?
+                } else {
+                    self.get_null()
+                };
+
+                self.builder.build_store(*ptr, v);
+            }
+
+            _ => {}
         }
 
         Ok(())
@@ -422,51 +497,6 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         };
 
         self.builder.build_return(Some(&v));
-
-        Ok(())
-    }
-
-    fn visit_statements(
-        &mut self,
-        statements: &'input [ast::Statement<'input>],
-    ) -> Result<(), CompilerError<'input>> {
-        for statement in statements.iter() {
-            self.visit_statement(statement)?;
-        }
-
-        Ok(())
-    }
-
-    fn visit_statement(
-        &mut self,
-        statement: &'input ast::Statement<'input>,
-    ) -> Result<(), CompilerError<'input>> {
-        match statement {
-            ast::Statement::ReturnStatement { expression, .. } => {
-                self.put_return(expression.as_ref())?;
-            }
-
-            ast::Statement::ExpressionStatement { expression, .. } => {
-                self.translate_expression(expression)?;
-            }
-
-            ast::Statement::DefinitionStatement {
-                definition,
-                expression,
-                ..
-            } => {
-                let ptr = self.get_pointer_for_definition(definition);
-                let v = if let Some(expression) = expression {
-                    self.translate_expression(expression)?
-                } else {
-                    self.get_null()
-                };
-
-                self.builder.build_store(*ptr, v);
-            }
-
-            _ => {}
-        }
 
         Ok(())
     }
