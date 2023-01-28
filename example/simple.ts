@@ -3,7 +3,7 @@ function x(): number {
 }
 
 function y(): number {
-    return 10;
+    return 10 * - 2;
 }
 
 const b: number = x();

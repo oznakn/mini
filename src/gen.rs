@@ -5,7 +5,7 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine};
-use inkwell::values::IntValue;
+use inkwell::values::BasicValueEnum;
 use inkwell::OptimizationLevel;
 
 use crate::ast;
@@ -114,14 +114,132 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         Ok(())
     }
 
+    fn translate_binary_expression(
+        &self,
+        expression: &'input ast::Expression<'input>,
+    ) -> Result<BasicValueEnum, CompilerError<'input>> {
+        if let ast::Expression::BinaryExpression {
+            operator,
+            left,
+            right,
+            ..
+        } = expression
+        {
+            match operator {
+                ast::BinaryOperator::Addition => {
+                    let left = self.translate_expression(left)?;
+                    let right = self.translate_expression(right)?;
+
+                    let v = self.builder.build_int_add(
+                        left.into_int_value(),
+                        right.into_int_value(),
+                        "addtmp",
+                    );
+
+                    Ok(v.into())
+                }
+
+                ast::BinaryOperator::Subtraction => {
+                    let left = self.translate_expression(left)?;
+                    let right = self.translate_expression(right)?;
+
+                    let v = self.builder.build_int_sub(
+                        left.into_int_value(),
+                        right.into_int_value(),
+                        "subtmp",
+                    );
+
+                    Ok(v.into())
+                }
+
+                ast::BinaryOperator::Multiplication => {
+                    let left = self.translate_expression(left)?;
+                    let right = self.translate_expression(right)?;
+
+                    let v = self.builder.build_int_mul(
+                        left.into_int_value(),
+                        right.into_int_value(),
+                        "multmp",
+                    );
+
+                    Ok(v.into())
+                }
+
+                _ => unimplemented!(),
+            }
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn translate_unary_expression(
+        &self,
+        expression: &'input ast::Expression<'input>,
+    ) -> Result<BasicValueEnum, CompilerError<'input>> {
+        if let ast::Expression::UnaryExpression {
+            operator,
+            expression,
+            ..
+        } = expression
+        {
+            match operator {
+                ast::UnaryOperator::Positive => {
+                    let v = self.translate_expression(&expression)?;
+
+                    Ok(v.into())
+                }
+
+                ast::UnaryOperator::Negative => {
+                    let i64_type = self.context.i64_type();
+                    let left = i64_type.const_int(0, false);
+
+                    let right = self.translate_expression(&expression)?;
+
+                    let v = self
+                        .builder
+                        .build_int_sub(left, right.into_int_value(), "subtmp");
+
+                    Ok(v.into())
+                }
+
+                _ => unimplemented!(),
+            }
+        } else {
+            unreachable!()
+        }
+    }
+
     fn translate_expression(
         &self,
-        _expression: &'input ast::Expression<'input>,
-    ) -> Result<IntValue, CompilerError<'input>> {
-        let i64_type = self.context.i64_type();
-        let v = i64_type.const_int(0, false);
+        expression: &'input ast::Expression<'input>,
+    ) -> Result<BasicValueEnum, CompilerError<'input>> {
+        match expression {
+            ast::Expression::ConstantExpression { value, .. } => match value {
+                ast::Constant::Integer(data) => {
+                    let i64_type = self.context.i64_type();
+                    let v = i64_type.const_int(*data, false);
 
-        Ok(v)
+                    Ok(v.into())
+                }
+
+                ast::Constant::Float(data) => {
+                    let f64_type = self.context.f64_type();
+                    let v = f64_type.const_float(*data);
+
+                    Ok(v.into())
+                }
+
+                _ => unimplemented!(),
+            },
+
+            ast::Expression::BinaryExpression { .. } => {
+                self.translate_binary_expression(expression)
+            }
+
+            ast::Expression::UnaryExpression { .. } => self.translate_unary_expression(expression),
+
+            _ => unimplemented!(),
+        }
     }
 
     fn put_return(
@@ -134,7 +252,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             let i64_type = self.context.i64_type();
             let v = i64_type.const_int(0, false);
 
-            v
+            v.into()
         };
 
         self.builder.build_return(Some(&v));

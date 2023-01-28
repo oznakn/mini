@@ -267,7 +267,7 @@ String: ast::Constant<'input> = {
 };
 
 Number: ast::Constant<'input> = {
-    <value:r"[0-9]+"> => ast::Constant::Integer(i64::from_str(<>).unwrap()),
+    <value:r"[0-9]+"> => ast::Constant::Integer(u64::from_str(<>).unwrap()),
     <value:r"[0-9]+\.[0-9]+"> => ast::Constant::Float(f64::from_str(<>).unwrap()),
 }
 
