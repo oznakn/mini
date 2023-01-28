@@ -23,8 +23,10 @@ pub struct IRGenerator<'input, 'ctx> {
     module: Module<'ctx>,
     builder: Builder<'ctx>,
 
-    functions: IndexMap<Index, (String, FunctionValue<'ctx>)>,
+    functions: IndexMap<Index, FunctionValue<'ctx>>,
     variables: IndexMap<Index, PointerValue<'ctx>>,
+
+    current_function_index: Option<Index>,
 }
 
 impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
@@ -44,6 +46,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             builder: context.create_builder(),
             functions: IndexMap::new(),
             variables: IndexMap::new(),
+            current_function_index: None,
         };
         ir_generator.init()?;
         ir_generator.compile()?;
@@ -83,6 +86,12 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         }
 
         Ok(())
+    }
+
+    fn current_function(&self) -> &FunctionValue<'ctx> {
+        let function_id = self.current_function_index.unwrap();
+
+        &self.functions.get(&function_id).unwrap()
     }
 
     fn get_pointer_for_definition(
@@ -159,8 +168,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         let fn_type = self.context.i64_type().fn_type(&[], false);
         let fn_value = self.module.add_function(name, fn_type, None);
 
-        self.functions
-            .insert(function_variable_id, (name.to_owned(), fn_value));
+        self.functions.insert(function_variable_id, fn_value);
 
         Ok(())
     }
@@ -169,19 +177,21 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         &mut self,
         function_variable_id: &Index,
     ) -> Result<(), CompilerError<'input>> {
-        let scope = self.symbol_table.function_scope(function_variable_id);
+        self.current_function_index = Some(function_variable_id.to_owned());
 
-        let (function_name, function) = self.functions.get(function_variable_id).unwrap();
+        let scope = self.symbol_table.function_scope(function_variable_id);
+        let function = self.functions.get(function_variable_id).unwrap();
 
         let basic_block = self.context.append_basic_block(*function, "entry");
         self.builder.position_at_end(basic_block);
 
-        let function_name = function_name.to_owned();
-        self.define_variables(function_name.as_str(), function_variable_id)?;
+        {
+            self.define_variables(function_variable_id)?;
 
-        self.visit_statements(scope.statements)?;
-        if scope.kind == st::ScopeKind::Global {
-            self.put_return(None)?;
+            self.visit_statements(scope.statements)?;
+            if scope.kind == st::ScopeKind::Global {
+                self.put_return(None)?;
+            }
         }
 
         Ok(())
@@ -189,7 +199,6 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
     fn define_variables(
         &mut self,
-        function_name: &str,
         function_variable_id: &Index,
     ) -> Result<(), CompilerError<'input>> {
         let scope = self.symbol_table.function_scope(function_variable_id);
@@ -200,7 +209,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             if !variable.is_function() {
                 let alloca = self.builder.build_alloca(
                     self.convert_kind_to_native(&variable.definition.kind),
-                    &format!("{}{}", function_name, variable.definition.name),
+                    variable.definition.name,
                 );
 
                 self.variables.insert(*variable_id, alloca);
@@ -394,7 +403,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         }
     }
 
-    fn translate_unary_expression(
+    fn translate_int_unary_expression(
         &self,
         expression: &'input ast::Expression<'input>,
     ) -> Result<BasicValueEnum, CompilerError<'input>> {
@@ -413,13 +422,50 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
                 ast::UnaryOperator::Negative => {
                     let i64_type = self.context.i64_type();
-                    let left = i64_type.const_int(0, true);
+                    let left = i64_type.const_zero();
 
                     let right = self.translate_expression(&expression)?;
 
                     let v = self
                         .builder
                         .build_int_sub(left, right.into_int_value(), "subtmp");
+
+                    Ok(v.into())
+                }
+
+                _ => unimplemented!(),
+            }
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn translate_float_unary_expression(
+        &self,
+        expression: &'input ast::Expression<'input>,
+    ) -> Result<BasicValueEnum, CompilerError<'input>> {
+        if let ast::Expression::UnaryExpression {
+            operator,
+            expression,
+            ..
+        } = expression
+        {
+            match operator {
+                ast::UnaryOperator::Positive => {
+                    let v = self.translate_expression(&expression)?;
+
+                    Ok(v.into())
+                }
+
+                ast::UnaryOperator::Negative => {
+                    let f64_type = self.context.f64_type();
+                    let left = f64_type.const_zero();
+
+                    let right = self.translate_expression_into_float(&expression)?;
+
+                    let v = self
+                        .builder
+                        .build_float_sub(left, right.into_float_value(), "subtmp");
 
                     Ok(v.into())
                 }
@@ -462,6 +508,20 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 Ok(v)
             }
 
+            ast::Expression::CallExpression { identifier, .. } => {
+                let function_variable_id = self.symbol_table.identifier_ref(identifier);
+                let function = self.functions.get(function_variable_id).unwrap();
+
+                let v = self
+                    .builder
+                    .build_call(*function, &[], "tmp")
+                    .try_as_basic_value()
+                    .left()
+                    .unwrap();
+
+                Ok(v)
+            }
+
             ast::Expression::BinaryExpression { left, right, .. } => {
                 let left_kind = self.symbol_table.expression_kind(left);
                 let right_kind = self.symbol_table.expression_kind(right);
@@ -480,7 +540,20 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 }
             }
 
-            ast::Expression::UnaryExpression { .. } => self.translate_unary_expression(expression),
+            ast::Expression::UnaryExpression { expression: e, .. } => {
+                let result_kind = self.symbol_table.expression_kind(e);
+
+                match result_kind {
+                    ast::VariableKind::Number { is_float } => {
+                        if *is_float {
+                            self.translate_float_unary_expression(expression)
+                        } else {
+                            self.translate_int_unary_expression(expression)
+                        }
+                    }
+                    _ => unimplemented!(),
+                }
+            }
 
             _ => unimplemented!(),
         }
@@ -495,6 +568,12 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         } else {
             self.get_null()
         };
+
+        // TODO: check here
+        // let ret_block = self
+        //     .context
+        //     .append_basic_block(self.current_function(), "ret");
+        // self.builder.position_at_end(ret_block);
 
         self.builder.build_return(Some(&v));
 

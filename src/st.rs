@@ -330,6 +330,8 @@ impl<'input> SymbolTable<'input> {
                 match &variable.definition.kind {
                     ast::VariableKind::Function { return_kind, .. } => {
                         let kind = return_kind.as_ref().clone();
+
+                        self.set_identifier_ref(identifier, &variable_id);
                         self.set_expression_kind(expression, kind.clone());
 
                         Ok(kind)
