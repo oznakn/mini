@@ -5,16 +5,8 @@ use indexmap::IndexMap;
 use crate::ast;
 use crate::error::CompilerError;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum ScopeKind {
-    Global,
-    Function,
-    Local,
-}
-
 #[derive(Clone, Debug)]
 pub struct Scope<'input> {
-    pub kind: ScopeKind,
     parent: Option<Index>,
 
     pub statements: &'input Vec<ast::Statement<'input>>,
@@ -65,8 +57,7 @@ impl<'input> SymbolTable<'input> {
             identifier_ref_map: IndexMap::new(),
         };
 
-        let global_scope =
-            symbol_table.create_scope(ScopeKind::Global, None, &program.statements)?;
+        let global_scope = symbol_table.create_scope(None, &program.statements)?;
 
         let main_function = symbol_table.add_variable(&global_scope, main_def)?;
         symbol_table.main_function = Some(main_function);
@@ -156,12 +147,10 @@ impl<'input> SymbolTable<'input> {
 impl<'input> SymbolTable<'input> {
     fn create_scope(
         &mut self,
-        kind: ScopeKind,
         parent_scope: Option<Index>,
         statements: &'input Vec<ast::Statement<'input>>,
     ) -> Result<Index, CompilerError<'input>> {
         let scope_id = self.scope_arena.insert(Scope {
-            kind,
             parent: parent_scope,
             statements,
             variables: IndexMap::new(),
@@ -203,8 +192,7 @@ impl<'input> SymbolTable<'input> {
                     ..
                 } => {
                     let variable_id = self.add_variable(scope_id, &definition)?;
-                    let function_scope_id =
-                        self.create_scope(ScopeKind::Function, Some(*scope_id), statements)?;
+                    let function_scope_id = self.create_scope(Some(*scope_id), statements)?;
 
                     self.set_function_scope(&variable_id, &function_scope_id);
                     self.build_scope(&function_scope_id)?;

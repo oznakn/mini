@@ -56,6 +56,10 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     }
 
     fn write_to_file(&self) -> Result<(), CompilerError<'input>> {
+        self.module.verify().map_err(|err| {
+            CompilerError::CodeGenError(format!("Could not verify module: {}", err))
+        })?;
+
         Target::initialize_all(&InitializationConfig::default());
 
         let target_triple = TargetMachine::get_default_triple();
@@ -88,6 +92,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         Ok(())
     }
 
+    #[allow(dead_code)]
     fn current_function(&self) -> &FunctionValue<'ctx> {
         let function_id = self.current_function_index.unwrap();
 
@@ -189,9 +194,8 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             self.define_variables(function_variable_id)?;
 
             self.visit_statements(scope.statements)?;
-            if scope.kind == st::ScopeKind::Global {
-                self.put_return(None)?;
-            }
+
+            self.put_return(None, true)?;
         }
 
         Ok(())
@@ -236,7 +240,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     ) -> Result<(), CompilerError<'input>> {
         match statement {
             ast::Statement::ReturnStatement { expression, .. } => {
-                self.put_return(expression.as_ref())?;
+                self.put_return(expression.as_ref(), false)?;
             }
 
             ast::Statement::ExpressionStatement { expression, .. } => {
@@ -562,6 +566,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     fn put_return(
         &mut self,
         expression: Option<&'input ast::Expression<'input>>,
+        terminate: bool,
     ) -> Result<(), CompilerError<'input>> {
         let v = if let Some(expression) = expression {
             self.translate_expression(expression)?
@@ -569,13 +574,14 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             self.get_null()
         };
 
-        // TODO: check here
-        // let ret_block = self
-        //     .context
-        //     .append_basic_block(self.current_function(), "ret");
-        // self.builder.position_at_end(ret_block);
-
         self.builder.build_return(Some(&v));
+
+        if !terminate {
+            let ret_block = self
+                .context
+                .append_basic_block(*self.current_function(), "next");
+            self.builder.position_at_end(ret_block);
+        }
 
         Ok(())
     }
