@@ -2,7 +2,6 @@ use indexmap::IndexMap;
 
 use crate::ast;
 use crate::error::CompilerError;
-use crate::value;
 
 pub type NodeId = usize;
 
@@ -64,7 +63,7 @@ impl<'input> SymbolTable<'input> {
                 identifier: "main".as_ref(),
                 kind: ast::VariableKind::Function {
                     parameters: Vec::new(),
-                    return_kind: Box::new(value::VariableKind::Number),
+                    return_kind: Box::new(ast::VariableKind::Number),
                 },
                 is_writable: false,
             },

@@ -5,6 +5,5 @@ pub mod cli;
 pub mod error;
 pub mod gen;
 pub mod st;
-pub mod value;
 
-lalrpop_mod!(pub mini);
+lalrpop_mod!(pub parser);

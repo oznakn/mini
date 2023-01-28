@@ -4,7 +4,7 @@ use std::fs;
 
 use crate::error::CompilerError;
 use crate::gen;
-use crate::mini;
+use crate::parser;
 use crate::st;
 
 fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
@@ -15,7 +15,7 @@ fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
     let content =
         fs::read_to_string(input_file).map_err(|_| format!("File not found: {}", input_file))?;
 
-    let program = mini::ProgramParser::new()
+    let program = parser::ProgramParser::new()
         .parse(&content)
         .map_err(|err| CompilerError::ParserError(err).to_string())?;
 
