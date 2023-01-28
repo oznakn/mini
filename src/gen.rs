@@ -1,5 +1,6 @@
 use std::path;
 
+use generational_arena::Index;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
@@ -77,27 +78,30 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     }
 
     fn init(&mut self) -> Result<(), CompilerError<'input>> {
-        let global_scope_id = self.symbol_table.global_scope.unwrap();
+        for variable_id in self.symbol_table.function_scope_map.keys() {
+            let variable = self.symbol_table.variable(*variable_id);
 
-        let main_function = st::Function {
-            scope_id: global_scope_id,
-            definition: &self.symbol_table.main_def,
-        };
-        self.init_function(&main_function)?;
+            let func_name = if self.symbol_table.main_function.unwrap() == *variable_id {
+                "main".to_owned()
+            } else {
+                format!("f{}", variable.definition.identifier)
+            };
+
+            self.init_function(func_name.as_str(), *variable_id)?;
+        }
 
         Ok(())
     }
 
     fn init_function(
         &mut self,
-        function: &st::Function<'input>,
+        name: &str,
+        function_variable_id: Index,
     ) -> Result<(), CompilerError<'input>> {
-        let scope = self.symbol_table.scope(function.scope_id);
+        let scope = self.symbol_table.function_scope(function_variable_id);
 
         let fn_type = self.context.i64_type().fn_type(&[], false);
-        let fn_value = self
-            .module
-            .add_function(function.definition.identifier, fn_type, None);
+        let fn_value = self.module.add_function(name, fn_type, None);
 
         let basic_block = self.context.append_basic_block(fn_value, "entry");
         self.builder.position_at_end(basic_block);
@@ -107,18 +111,12 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             self.put_return(None)?;
         }
 
-        for f_id in scope.functions.values() {
-            let f = self.symbol_table.function(f_id.to_owned());
-
-            self.init_function(f)?;
-        }
-
         Ok(())
     }
 
     fn translate_expression(
         &self,
-        expression: &'input ast::Expression<'input>,
+        _expression: &'input ast::Expression<'input>,
     ) -> Result<IntValue, CompilerError<'input>> {
         let i64_type = self.context.i64_type();
         let v = i64_type.const_int(0, false);

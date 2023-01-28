@@ -2,6 +2,7 @@ use clap::{App, Arg};
 use inkwell::context::Context;
 use std::fs;
 
+use crate::ast;
 use crate::error::CompilerError;
 use crate::gen;
 use crate::parser;
@@ -19,7 +20,17 @@ fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
         .parse(&content)
         .map_err(|err| CompilerError::ParserError(err).to_string())?;
 
-    let symbol_table = st::SymbolTable::from(&program).map_err(|err| err.to_string())?;
+    let main_def = ast::VariableDefinition {
+        location: (0, 0),
+        identifier: "main",
+        kind: ast::VariableKind::Function {
+            parameters: Vec::new(),
+            return_kind: Box::new(ast::VariableKind::Number),
+        },
+        is_writable: false,
+    };
+
+    let symbol_table = st::SymbolTable::from(&main_def, &program).map_err(|err| err.to_string())?;
 
     let ir_context = Context::create();
     gen::IRGenerator::generate(
