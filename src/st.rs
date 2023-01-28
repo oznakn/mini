@@ -15,7 +15,7 @@ pub enum ScopeKind {
 #[derive(Clone, Debug)]
 pub struct Scope<'input> {
     pub kind: ScopeKind,
-    pub parent: Option<Index>,
+    parent: Option<Index>,
 
     pub statements: &'input Vec<ast::Statement<'input>>,
 
@@ -24,8 +24,6 @@ pub struct Scope<'input> {
 
 #[derive(Clone, Debug)]
 pub struct Variable<'input> {
-    pub scope_id: Index,
-
     pub definition: &'input ast::VariableDefinition<'input>,
 }
 
@@ -42,17 +40,14 @@ impl<'input> Variable<'input> {
 pub struct SymbolTable<'input> {
     pub main_function: Option<Index>,
 
-    pub scope_arena: Arena<Scope<'input>>,
-    pub variable_arena: Arena<Variable<'input>>,
+    scope_arena: Arena<Scope<'input>>,
+    variable_arena: Arena<Variable<'input>>,
 
-    pub function_scope_map: IndexMap<Index, Index>,
-    pub expression_kind_map:
-        IndexMap<ByAddress<&'input ast::Expression<'input>>, ast::VariableKind>,
+    function_scope_map: IndexMap<Index, Index>,
+    expression_kind_map: IndexMap<ByAddress<&'input ast::Expression<'input>>, ast::VariableKind>,
 
-    pub variable_definition_ref_map:
-        IndexMap<ByAddress<&'input ast::VariableDefinition<'input>>, Index>,
-    pub variable_identifier_ref_map:
-        IndexMap<ByAddress<&'input ast::VariableIdentifier<'input>>, Index>,
+    definition_ref_map: IndexMap<ByAddress<&'input ast::VariableDefinition<'input>>, Index>,
+    identifier_ref_map: IndexMap<ByAddress<&'input ast::VariableIdentifier<'input>>, Index>,
 }
 
 impl<'input> SymbolTable<'input> {
@@ -66,8 +61,8 @@ impl<'input> SymbolTable<'input> {
             variable_arena: Arena::new(),
             function_scope_map: IndexMap::new(),
             expression_kind_map: IndexMap::new(),
-            variable_definition_ref_map: IndexMap::new(),
-            variable_identifier_ref_map: IndexMap::new(),
+            definition_ref_map: IndexMap::new(),
+            identifier_ref_map: IndexMap::new(),
         };
 
         let global_scope =
@@ -82,6 +77,10 @@ impl<'input> SymbolTable<'input> {
         symbol_table.visit_scopes()?;
 
         Ok(symbol_table)
+    }
+
+    pub fn functions(&self) -> impl Iterator<Item = &Index> {
+        self.function_scope_map.iter().map(move |(id, _)| id)
     }
 
     pub fn scope(&self, scope_id: Index) -> &Scope<'input> {
@@ -110,6 +109,15 @@ impl<'input> SymbolTable<'input> {
         self.function_scope_map.insert(function_id, scope_id);
     }
 
+    pub fn expression_kind(
+        &self,
+        expression: &'input ast::Expression<'input>,
+    ) -> &ast::VariableKind {
+        self.expression_kind_map
+            .get(&ByAddress(expression))
+            .unwrap()
+    }
+
     fn set_expression_kind(
         &mut self,
         expression: &'input ast::Expression<'input>,
@@ -118,22 +126,30 @@ impl<'input> SymbolTable<'input> {
         self.expression_kind_map.insert(ByAddress(expression), kind);
     }
 
-    fn set_variable_definition_ref(
-        &mut self,
-        variable_definition: &'input ast::VariableDefinition<'input>,
-        variable_id: Index,
-    ) {
-        self.variable_definition_ref_map
-            .insert(ByAddress(variable_definition), variable_id);
+    pub fn definition_ref(&self, definition: &'input ast::VariableDefinition<'input>) -> &Index {
+        self.definition_ref_map.get(&ByAddress(definition)).unwrap()
     }
 
-    fn set_variable_identifier_ref(
+    fn set_definition_ref(
         &mut self,
-        variable_identifier: &'input ast::VariableIdentifier<'input>,
+        definition: &'input ast::VariableDefinition<'input>,
         variable_id: Index,
     ) {
-        self.variable_identifier_ref_map
-            .insert(ByAddress(variable_identifier), variable_id);
+        self.definition_ref_map
+            .insert(ByAddress(definition), variable_id);
+    }
+
+    pub fn identifier_ref(&self, identifier: &'input ast::VariableIdentifier<'input>) -> &Index {
+        self.identifier_ref_map.get(&ByAddress(identifier)).unwrap()
+    }
+
+    fn set_identifier_ref(
+        &mut self,
+        identifier: &'input ast::VariableIdentifier<'input>,
+        variable_id: Index,
+    ) {
+        self.identifier_ref_map
+            .insert(ByAddress(identifier), variable_id);
     }
 }
 
@@ -165,12 +181,9 @@ impl<'input> SymbolTable<'input> {
             return Err(CompilerError::VariableAlreadyDefined(definition.name));
         }
 
-        let variable_id = self.variable_arena.insert(Variable {
-            scope_id,
-            definition,
-        });
+        let variable_id = self.variable_arena.insert(Variable { definition });
 
-        self.set_variable_definition_ref(definition, variable_id);
+        self.set_definition_ref(definition, variable_id);
 
         let scope = self.scope_mut(scope_id);
         scope.variables.insert(definition.name, variable_id);
@@ -269,7 +282,7 @@ impl<'input> SymbolTable<'input> {
 
                 let kind = variable.definition.kind.clone();
 
-                self.set_variable_identifier_ref(identifier, variable_id);
+                self.set_identifier_ref(identifier, variable_id);
                 self.set_expression_kind(expression, kind.clone());
 
                 Ok(kind)

@@ -1,6 +1,5 @@
 use std::path;
 
-use by_address::ByAddress;
 use generational_arena::Index;
 use indexmap::IndexMap;
 use inkwell::builder::Builder;
@@ -18,13 +17,13 @@ use crate::st;
 pub struct IRGenerator<'input, 'ctx> {
     pub optimize: bool,
 
-    pub symbol_table: &'input st::SymbolTable<'input>,
+    symbol_table: &'input st::SymbolTable<'input>,
 
-    pub context: &'ctx Context,
-    pub module: Module<'ctx>,
-    pub builder: Builder<'ctx>,
+    context: &'ctx Context,
+    module: Module<'ctx>,
+    builder: Builder<'ctx>,
 
-    pub variable_pointers: IndexMap<Index, PointerValue<'ctx>>,
+    variable_pointers: IndexMap<Index, PointerValue<'ctx>>,
 }
 
 impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
@@ -87,11 +86,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         &self,
         definition: &'input ast::VariableDefinition<'input>,
     ) -> &PointerValue<'ctx> {
-        let variable_id = self
-            .symbol_table
-            .variable_definition_ref_map
-            .get(&ByAddress(definition))
-            .unwrap();
+        let variable_id = self.symbol_table.definition_ref(definition);
 
         self.variable_pointers.get(variable_id).unwrap()
     }
@@ -100,23 +95,9 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         &self,
         identifier: &'input ast::VariableIdentifier<'input>,
     ) -> &PointerValue<'ctx> {
-        let variable_id = self
-            .symbol_table
-            .variable_identifier_ref_map
-            .get(&ByAddress(identifier))
-            .unwrap();
+        let variable_id = self.symbol_table.identifier_ref(identifier);
 
         self.variable_pointers.get(variable_id).unwrap()
-    }
-
-    fn get_expression_kind(
-        &self,
-        expression: &'input ast::Expression<'input>,
-    ) -> &ast::VariableKind {
-        self.symbol_table
-            .expression_kind_map
-            .get(&ByAddress(expression))
-            .unwrap()
     }
 
     fn convert_kind_to_native(&self, variable_kind: &ast::VariableKind) -> BasicTypeEnum<'ctx> {
@@ -138,7 +119,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     }
 
     fn init(&mut self) -> Result<(), CompilerError<'input>> {
-        for variable_id in self.symbol_table.function_scope_map.keys() {
+        for variable_id in self.symbol_table.functions() {
             let variable = self.symbol_table.variable(*variable_id);
 
             let func_name = if self.symbol_table.main_function.unwrap() == *variable_id {
@@ -407,8 +388,8 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             }
 
             ast::Expression::BinaryExpression { left, right, .. } => {
-                let left_kind = self.get_expression_kind(left);
-                let right_kind = self.get_expression_kind(right);
+                let left_kind = self.symbol_table.expression_kind(left);
+                let right_kind = self.symbol_table.expression_kind(right);
 
                 let result_kind = left_kind.operation_result(right_kind);
 
