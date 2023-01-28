@@ -1,5 +1,6 @@
 use std::path;
 
+use by_address::ByAddress;
 use generational_arena::Index;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -77,6 +78,16 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         Ok(())
     }
 
+    fn get_expression_kind(
+        &self,
+        expression: &'input ast::Expression<'input>,
+    ) -> &ast::VariableKind {
+        self.symbol_table
+            .expression_kind_map
+            .get(&ByAddress(expression))
+            .unwrap()
+    }
+
     fn init(&mut self) -> Result<(), CompilerError<'input>> {
         for variable_id in self.symbol_table.function_scope_map.keys() {
             let variable = self.symbol_table.variable(*variable_id);
@@ -114,7 +125,30 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         Ok(())
     }
 
-    fn translate_binary_expression(
+    fn translate_expression_into_float(
+        &self,
+        expression: &'input ast::Expression<'input>,
+    ) -> Result<BasicValueEnum, CompilerError<'input>> {
+        let translated = self.translate_expression(expression)?;
+
+        match translated {
+            BasicValueEnum::FloatValue(_) => Ok(translated),
+            BasicValueEnum::IntValue(v) => {
+                let v = self.builder.build_signed_int_to_float(
+                    v,
+                    self.context.f64_type(),
+                    "int_to_float",
+                );
+
+                Ok(v.into())
+            }
+            _ => Err(CompilerError::CodeGenError(
+                "Cannot translate expression into float".to_string(),
+            )),
+        }
+    }
+
+    fn translate_int_binary_expression(
         &self,
         expression: &'input ast::Expression<'input>,
     ) -> Result<BasicValueEnum, CompilerError<'input>> {
@@ -172,6 +206,64 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         }
     }
 
+    fn translate_float_binary_expression(
+        &self,
+        expression: &'input ast::Expression<'input>,
+    ) -> Result<BasicValueEnum, CompilerError<'input>> {
+        if let ast::Expression::BinaryExpression {
+            operator,
+            left,
+            right,
+            ..
+        } = expression
+        {
+            match operator {
+                ast::BinaryOperator::Addition => {
+                    let left = self.translate_expression_into_float(left)?;
+                    let right = self.translate_expression_into_float(right)?;
+
+                    let v = self.builder.build_float_add(
+                        left.into_float_value(),
+                        right.into_float_value(),
+                        "addtmp",
+                    );
+
+                    Ok(v.into())
+                }
+
+                ast::BinaryOperator::Subtraction => {
+                    let left = self.translate_expression_into_float(left)?;
+                    let right = self.translate_expression_into_float(right)?;
+
+                    let v = self.builder.build_float_sub(
+                        left.into_float_value(),
+                        right.into_float_value(),
+                        "subtmp",
+                    );
+
+                    Ok(v.into())
+                }
+
+                ast::BinaryOperator::Multiplication => {
+                    let left = self.translate_expression_into_float(left)?;
+                    let right = self.translate_expression_into_float(right)?;
+
+                    let v = self.builder.build_float_mul(
+                        left.into_float_value(),
+                        right.into_float_value(),
+                        "multmp",
+                    );
+
+                    Ok(v.into())
+                }
+
+                _ => unimplemented!(),
+            }
+        } else {
+            unreachable!()
+        }
+    }
+
     fn translate_unary_expression(
         &self,
         expression: &'input ast::Expression<'input>,
@@ -191,7 +283,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
                 ast::UnaryOperator::Negative => {
                     let i64_type = self.context.i64_type();
-                    let left = i64_type.const_int(0, false);
+                    let left = i64_type.const_int(0, true);
 
                     let right = self.translate_expression(&expression)?;
 
@@ -217,7 +309,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             ast::Expression::ConstantExpression { value, .. } => match value {
                 ast::Constant::Integer(data) => {
                     let i64_type = self.context.i64_type();
-                    let v = i64_type.const_int(*data, false);
+                    let v = i64_type.const_int(*data, true);
 
                     Ok(v.into())
                 }
@@ -232,8 +324,22 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 _ => unimplemented!(),
             },
 
-            ast::Expression::BinaryExpression { .. } => {
-                self.translate_binary_expression(expression)
+            ast::Expression::BinaryExpression { left, right, .. } => {
+                let left_kind = self.get_expression_kind(left);
+                let right_kind = self.get_expression_kind(right);
+
+                let result_kind = left_kind.operation_result(right_kind);
+
+                match result_kind {
+                    ast::VariableKind::Number { is_float } => {
+                        if is_float {
+                            self.translate_float_binary_expression(expression)
+                        } else {
+                            self.translate_int_binary_expression(expression)
+                        }
+                    }
+                    _ => unimplemented!(),
+                }
             }
 
             ast::Expression::UnaryExpression { .. } => self.translate_unary_expression(expression),

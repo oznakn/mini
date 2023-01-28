@@ -269,8 +269,8 @@ impl<'input> SymbolTable<'input> {
                 Ok(kind)
             }
 
-            ast::Expression::UnaryExpression { expression, .. } => {
-                let kind = self.visit_expression(scope_id, &expression)?;
+            ast::Expression::UnaryExpression { expression: e, .. } => {
+                let kind = self.visit_expression(scope_id, &e)?;
 
                 self.set_expression_kind(expression, kind.clone());
 

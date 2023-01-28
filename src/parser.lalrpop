@@ -282,5 +282,7 @@ Constant: ast::Constant<'input> = {
 
 VariableKind: ast::VariableKind = {
     "string" => ast::VariableKind::String,
-    "number" => ast::VariableKind::Number,
+    "number" => ast::VariableKind::Number {
+        is_float: false,
+    },
 };

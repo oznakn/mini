@@ -4,7 +4,9 @@ pub enum VariableKind {
     Null,
     Boolean,
     String,
-    Number,
+    Number {
+        is_float: bool,
+    },
     Function {
         parameters: Vec<VariableKind>,
         return_kind: Box<VariableKind>,
@@ -28,8 +30,22 @@ impl VariableKind {
             VariableKind::Null => "null",
             VariableKind::Boolean => "boolean",
             VariableKind::String => "string",
-            VariableKind::Number => "number",
+            VariableKind::Number { .. } => "number",
             VariableKind::Function { .. } => "function",
+        }
+    }
+
+    fn is_number(&self) -> bool {
+        match self {
+            VariableKind::Number { .. } => true,
+            _ => false,
+        }
+    }
+
+    fn is_float(&self) -> bool {
+        match self {
+            VariableKind::Number { is_float } => *is_float,
+            _ => false,
         }
     }
 
@@ -42,8 +58,12 @@ impl VariableKind {
             return VariableKind::String;
         }
 
-        if *other == VariableKind::Number || *self == VariableKind::Number {
-            return VariableKind::Number;
+        if self.is_number() && other.is_number() {
+            if self.is_float() || other.is_float() {
+                return VariableKind::Number { is_float: true };
+            } else {
+                return VariableKind::Number { is_float: false };
+            }
         }
 
         return VariableKind::String;
@@ -56,8 +76,8 @@ impl<'input> Constant<'input> {
             Constant::Undefined => VariableKind::Undefined,
             Constant::Null => VariableKind::Null,
             Constant::Boolean(_) => VariableKind::Boolean,
-            Constant::Integer(_) => VariableKind::Number,
-            Constant::Float(_) => VariableKind::Number,
+            Constant::Integer(_) => VariableKind::Number { is_float: false },
+            Constant::Float(_) => VariableKind::Number { is_float: true },
             Constant::String(_) => VariableKind::String,
         }
     }
