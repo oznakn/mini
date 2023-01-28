@@ -22,7 +22,7 @@ fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
 
     let main_def = ast::VariableDefinition {
         location: (0, 0),
-        identifier: "main",
+        name: "main",
         kind: ast::VariableKind::Function {
             parameters: Vec::new(),
             return_kind: Box::new(ast::VariableKind::Number { is_float: false }),

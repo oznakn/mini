@@ -92,11 +92,11 @@ FunctionReturnKind: ast::VariableKind = {
 };
 
 FunctionStatement: ast::Statement<'input> = {
-    <l1:@L> "function" <ll1:@L> <identifier:Identifier> <ll2:@R> "(" <parameters:CommaList<VariableDefinition>> ")" ":" <return_kind:FunctionReturnKind> <l2:@R> <statements:Body> => ast::Statement::FunctionStatement {
+    <l1:@L> "function" <ll1:@L> <name:IdentifierName> <ll2:@R> "(" <parameters:CommaList<VariableDefinition>> ")" ":" <return_kind:FunctionReturnKind> <l2:@R> <statements:Body> => ast::Statement::FunctionStatement {
         location: (l1, l2),
         definition: ast::VariableDefinition {
             location: (ll1, ll2),
-            identifier,
+            name,
             kind: ast::VariableKind::Function {
                 return_kind: Box::new(return_kind),
                 parameters: parameters
@@ -233,20 +233,20 @@ LogicalOperator4: ast::BinaryOperator = {
 };
 
 VariableDefinition: ast::VariableDefinition<'input> = {
-    <l1:@L> <identifier:Identifier> ":" <kind:VariableKind> <l2:@R> => ast::VariableDefinition {
+    <l1:@L> <name:IdentifierName> ":" <kind:VariableKind> <l2:@R> => ast::VariableDefinition {
         location: (l1, l2),
-        identifier,
+        name,
         kind,
         is_writable: true,
     },
 }
 
 VariableIdentifier: ast::VariableIdentifier<'input> = {
-    <l1:@L> <identifier:Identifier> <l2:@R> => ast::VariableIdentifier::Identifier {
+    <l1:@L> <name:IdentifierName> <l2:@R> => ast::VariableIdentifier::Name {
         location: (l1, l2),
-        identifier,
+        name,
     },
-    <l1:@L> <base:VariableIdentifier> "." <property:Identifier> <l2:@R> => ast::VariableIdentifier::Property {
+    <l1:@L> <base:VariableIdentifier> "." <property:IdentifierName> <l2:@R> => ast::VariableIdentifier::Property {
         location: (l1, l2),
         base: Box::new(base),
         property,
@@ -258,7 +258,7 @@ VariableIdentifier: ast::VariableIdentifier<'input> = {
     },
 };
 
-Identifier: &'input str =
+IdentifierName: &'input str =
     <name:r"[a-zA-Z_][a-zA-Z0-9_]*"> => name;
 
 String: ast::Constant<'input> = {

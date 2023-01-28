@@ -144,7 +144,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             let func_name = if self.symbol_table.main_function.unwrap() == *variable_id {
                 "main".to_owned()
             } else {
-                format!("f{}", variable.definition.identifier)
+                format!("f{}", variable.definition.name)
             };
 
             self.init_function(func_name.as_str(), *variable_id)?;
@@ -189,7 +189,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             if !variable.is_function() {
                 let alloca = self.builder.build_alloca(
                     self.convert_kind_to_native(&variable.definition.kind),
-                    &format!("{}{}", function_name, variable.definition.identifier),
+                    &format!("{}{}", function_name, variable.definition.name),
                 );
 
                 self.variable_pointers.insert(*variable_id, alloca);

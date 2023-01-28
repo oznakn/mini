@@ -161,8 +161,8 @@ impl<'input> SymbolTable<'input> {
     ) -> Result<Index, CompilerError<'input>> {
         let scope = self.scope(scope_id);
 
-        if scope.variables.contains_key(definition.identifier) {
-            return Err(CompilerError::VariableAlreadyDefined(definition.identifier));
+        if scope.variables.contains_key(definition.name) {
+            return Err(CompilerError::VariableAlreadyDefined(definition.name));
         }
 
         let variable_id = self.variable_arena.insert(Variable {
@@ -173,7 +173,7 @@ impl<'input> SymbolTable<'input> {
         self.set_variable_definition_ref(definition, variable_id);
 
         let scope = self.scope_mut(scope_id);
-        scope.variables.insert(definition.identifier, variable_id);
+        scope.variables.insert(definition.name, variable_id);
 
         Ok(variable_id)
     }
@@ -238,8 +238,8 @@ impl<'input> SymbolTable<'input> {
         identifier: &'input ast::VariableIdentifier<'input>,
     ) -> Result<Index, CompilerError<'input>> {
         match identifier {
-            ast::VariableIdentifier::Identifier { identifier, .. } => {
-                self.fetch_variable_by_name(scope_id, identifier)
+            ast::VariableIdentifier::Name { name, .. } => {
+                self.fetch_variable_by_name(scope_id, name)
             }
             _ => unimplemented!(),
         }
@@ -321,11 +321,7 @@ impl<'input> SymbolTable<'input> {
 
                         Ok(kind)
                     }
-                    _ => {
-                        return Err(CompilerError::InvalidFunctionCall(
-                            variable.definition.identifier,
-                        ))
-                    }
+                    _ => return Err(CompilerError::InvalidFunctionCall(variable.definition.name)),
                 }
             }
 
