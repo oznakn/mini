@@ -2,11 +2,13 @@ use std::path;
 
 use by_address::ByAddress;
 use generational_arena::Index;
+use indexmap::IndexMap;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::Module;
 use inkwell::targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine};
-use inkwell::values::BasicValueEnum;
+use inkwell::types::BasicTypeEnum;
+use inkwell::values::{BasicValueEnum, PointerValue};
 use inkwell::OptimizationLevel;
 
 use crate::ast;
@@ -21,6 +23,8 @@ pub struct IRGenerator<'input, 'ctx> {
     pub context: &'ctx Context,
     pub module: Module<'ctx>,
     pub builder: Builder<'ctx>,
+
+    pub variable_pointers: IndexMap<Index, PointerValue<'ctx>>,
 }
 
 impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
@@ -38,6 +42,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             context,
             module,
             builder: context.create_builder(),
+            variable_pointers: IndexMap::new(),
         };
         ir_generator.init()?;
         ir_generator.write_to_file()?;
@@ -78,6 +83,32 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         Ok(())
     }
 
+    fn get_pointer_for_definition(
+        &self,
+        definition: &'input ast::VariableDefinition<'input>,
+    ) -> &PointerValue<'ctx> {
+        let variable_id = self
+            .symbol_table
+            .variable_definition_ref_map
+            .get(&ByAddress(definition))
+            .unwrap();
+
+        self.variable_pointers.get(variable_id).unwrap()
+    }
+
+    fn get_pointer_for_identifier(
+        &self,
+        identifier: &'input ast::VariableIdentifier<'input>,
+    ) -> &PointerValue<'ctx> {
+        let variable_id = self
+            .symbol_table
+            .variable_identifier_ref_map
+            .get(&ByAddress(identifier))
+            .unwrap();
+
+        self.variable_pointers.get(variable_id).unwrap()
+    }
+
     fn get_expression_kind(
         &self,
         expression: &'input ast::Expression<'input>,
@@ -86,6 +117,24 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             .expression_kind_map
             .get(&ByAddress(expression))
             .unwrap()
+    }
+
+    fn convert_kind_to_native(&self, variable_kind: &ast::VariableKind) -> BasicTypeEnum<'ctx> {
+        match variable_kind {
+            ast::VariableKind::Number { is_float } => {
+                if *is_float {
+                    self.context.f64_type().into()
+                } else {
+                    self.context.i64_type().into()
+                }
+            }
+
+            _ => unimplemented!(),
+        }
+    }
+
+    fn get_null(&self) -> BasicValueEnum<'ctx> {
+        self.context.i64_type().const_zero().into()
     }
 
     fn init(&mut self) -> Result<(), CompilerError<'input>> {
@@ -117,9 +166,34 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         let basic_block = self.context.append_basic_block(fn_value, "entry");
         self.builder.position_at_end(basic_block);
 
+        self.define_variables(name, function_variable_id)?;
+
         self.visit_statements(scope.statements)?;
         if scope.kind == st::ScopeKind::Global {
             self.put_return(None)?;
+        }
+
+        Ok(())
+    }
+
+    fn define_variables(
+        &mut self,
+        function_name: &str,
+        function_variable_id: Index,
+    ) -> Result<(), CompilerError<'input>> {
+        let scope = self.symbol_table.function_scope(function_variable_id);
+
+        for variable_id in scope.variables.values() {
+            let variable = self.symbol_table.variable(*variable_id);
+
+            if !variable.is_function() {
+                let alloca = self.builder.build_alloca(
+                    self.convert_kind_to_native(&variable.definition.kind),
+                    &format!("{}{}", function_name, variable.definition.identifier),
+                );
+
+                self.variable_pointers.insert(*variable_id, alloca);
+            }
         }
 
         Ok(())
@@ -324,6 +398,14 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 _ => unimplemented!(),
             },
 
+            ast::Expression::VariableExpression { identifier, .. } => {
+                let ptr = self.get_pointer_for_identifier(identifier);
+
+                let v = self.builder.build_load(*ptr, "temp");
+
+                Ok(v)
+            }
+
             ast::Expression::BinaryExpression { left, right, .. } => {
                 let left_kind = self.get_expression_kind(left);
                 let right_kind = self.get_expression_kind(right);
@@ -355,10 +437,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         let v = if let Some(expression) = expression {
             self.translate_expression(expression)?
         } else {
-            let i64_type = self.context.i64_type();
-            let v = i64_type.const_int(0, false);
-
-            v.into()
+            self.get_null()
         };
 
         self.builder.build_return(Some(&v));
@@ -388,6 +467,21 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
             ast::Statement::ExpressionStatement { expression, .. } => {
                 self.translate_expression(expression)?;
+            }
+
+            ast::Statement::DefinitionStatement {
+                definition,
+                expression,
+                ..
+            } => {
+                let ptr = self.get_pointer_for_definition(definition);
+                let v = if let Some(expression) = expression {
+                    self.translate_expression(expression)?
+                } else {
+                    self.get_null()
+                };
+
+                self.builder.build_store(*ptr, v);
             }
 
             _ => {}

@@ -7,3 +7,5 @@ function y(): number {
 }
 
 
+const b: number = 3 + 4;
+return b;
