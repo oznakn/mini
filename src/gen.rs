@@ -77,11 +77,10 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     }
 
     fn init(&mut self) -> Result<(), CompilerError<'input>> {
-        let scope = self.symbol_table.scope(self.symbol_table.global_scope);
+        let global_scope_id = self.symbol_table.global_scope.unwrap();
 
         let main_function = st::Function {
-            id: usize::MAX,
-            function_scope_id: scope.id,
+            scope_id: global_scope_id,
             definition: &self.symbol_table.main_def,
         };
         self.init_function(&main_function)?;
@@ -93,7 +92,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         &mut self,
         function: &st::Function<'input>,
     ) -> Result<(), CompilerError<'input>> {
-        let scope = self.symbol_table.scope(function.function_scope_id);
+        let scope = self.symbol_table.scope(function.scope_id);
 
         let fn_type = self.context.i64_type().fn_type(&[], false);
         let fn_value = self
@@ -108,7 +107,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             self.put_return(None)?;
         }
 
-        for f_id in scope.functions.iter() {
+        for f_id in scope.functions.values() {
             let f = self.symbol_table.function(f_id.to_owned());
 
             self.init_function(f)?;

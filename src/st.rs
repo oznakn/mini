@@ -1,14 +1,12 @@
+use generational_arena::{Arena, Index};
 use indexmap::IndexMap;
 
 use crate::ast;
 use crate::error::CompilerError;
 
-pub type NodeId = usize;
-
 #[derive(Clone, Debug)]
 pub struct Variable<'input> {
-    pub id: NodeId,
-    pub scope_id: NodeId,
+    pub scope_id: Index,
 
     pub definition: &'input ast::VariableDefinition<'input>,
     pub calls: Vec<&'input Vec<ast::Expression<'input>>>,
@@ -16,8 +14,7 @@ pub struct Variable<'input> {
 
 #[derive(Clone, Debug)]
 pub struct Function<'input> {
-    pub id: NodeId,
-    pub function_scope_id: NodeId,
+    pub scope_id: Index,
 
     pub definition: &'input ast::VariableDefinition<'input>,
 }
@@ -31,26 +28,27 @@ pub enum ScopeKind {
 
 #[derive(Clone, Debug)]
 pub struct Scope<'input> {
-    pub id: NodeId,
-    pub function_id: Option<NodeId>,
+    pub function_id: Option<Index>,
 
     pub kind: ScopeKind,
-    pub parent: Option<NodeId>,
+    pub parent: Option<Index>,
 
     pub statements: &'input Vec<ast::Statement<'input>>,
 
-    pub functions: Vec<NodeId>,
-    pub variables: IndexMap<&'input str, NodeId>,
+    pub functions: IndexMap<&'input str, Index>,
+    pub variables: IndexMap<&'input str, Index>,
 }
 
 #[derive(Clone, Debug)]
 pub struct SymbolTable<'input> {
-    pub global_scope: NodeId,
+    pub global_scope: Option<Index>,
     pub main_def: ast::VariableDefinition<'input>,
 
-    pub scope_arena: Vec<Scope<'input>>,
-    pub function_arena: Vec<Function<'input>>,
-    pub variable_arena: Vec<Variable<'input>>,
+    pub scope_arena: Arena<Scope<'input>>,
+    pub function_arena: Arena<Function<'input>>,
+    pub variable_arena: Arena<Variable<'input>>,
+
+    pub expression_kind_map: IndexMap<&'input ast::Expression<'input>, ast::VariableKind>,
 }
 
 impl<'input> SymbolTable<'input> {
@@ -67,12 +65,13 @@ impl<'input> SymbolTable<'input> {
                 },
                 is_writable: false,
             },
-            global_scope: 0,
-            scope_arena: Vec::new(),
-            function_arena: Vec::new(),
-            variable_arena: Vec::new(),
+            global_scope: None,
+            scope_arena: Arena::new(),
+            function_arena: Arena::new(),
+            variable_arena: Arena::new(),
+            expression_kind_map: IndexMap::new(),
         };
-        symbol_table.new_global_scope(&program.statements)?; // will register global scope with id 0
+        symbol_table.create_scope(ScopeKind::Global, None, None, &program.statements)?; // will register global scope with id 0
 
         symbol_table.build_variable_fields()?;
         symbol_table.check_types()?;
@@ -80,54 +79,45 @@ impl<'input> SymbolTable<'input> {
         Ok(symbol_table)
     }
 
-    pub fn scope(&self, scope_id: NodeId) -> &Scope<'input> {
-        &self.scope_arena.get(scope_id).unwrap()
+    pub fn scope(&self, scope_id: Index) -> &Scope<'input> {
+        self.scope_arena.get(scope_id).unwrap()
     }
 
-    pub fn variable(&self, variable_id: NodeId) -> &Variable<'input> {
-        &self.variable_arena.get(variable_id).unwrap()
+    pub fn variable(&self, variable_id: Index) -> &Variable<'input> {
+        self.variable_arena.get(variable_id).unwrap()
     }
 
-    pub fn function(&self, function_id: NodeId) -> &Function<'input> {
-        &self.function_arena.get(function_id).unwrap()
+    pub fn function(&self, function_id: Index) -> &Function<'input> {
+        self.function_arena.get(function_id).unwrap()
+    }
+
+    pub fn scope_mut(&mut self, scope_id: Index) -> &mut Scope<'input> {
+        self.scope_arena.get_mut(scope_id).unwrap()
+    }
+
+    pub fn variable_mut(&mut self, variable_id: Index) -> &mut Variable<'input> {
+        self.variable_arena.get_mut(variable_id).unwrap()
+    }
+
+    pub fn function_mut(&mut self, function_id: Index) -> &mut Function<'input> {
+        self.function_arena.get_mut(function_id).unwrap()
     }
 }
 
 impl<'input> SymbolTable<'input> {
-    fn new_global_scope(
+    fn create_scope(
         &mut self,
+        kind: ScopeKind,
+        parent_scope: Option<Index>,
+        current_function: Option<Index>,
         statements: &'input Vec<ast::Statement<'input>>,
-    ) -> Result<NodeId, CompilerError<'input>> {
-        let scope_id = self.scope_arena.len();
-        self.scope_arena.push(Scope {
-            id: scope_id,
-            function_id: None,
-            kind: ScopeKind::Global,
-            parent: None,
+    ) -> Result<Index, CompilerError<'input>> {
+        let scope_id = self.scope_arena.insert(Scope {
+            kind,
+            parent: parent_scope,
+            function_id: current_function,
             statements,
-            functions: Vec::new(),
-            variables: IndexMap::new(),
-        });
-
-        self.build_scope(scope_id)?;
-
-        Ok(scope_id)
-    }
-
-    fn new_function_scope(
-        &mut self,
-        parent: NodeId,
-        function_id: NodeId,
-        statements: &'input Vec<ast::Statement<'input>>,
-    ) -> Result<NodeId, CompilerError<'input>> {
-        let scope_id = self.scope_arena.len();
-        self.scope_arena.push(Scope {
-            id: scope_id,
-            function_id: Some(function_id),
-            kind: ScopeKind::Function,
-            parent: Some(parent),
-            statements,
-            functions: Vec::new(),
+            functions: IndexMap::new(),
             variables: IndexMap::new(),
         });
 
@@ -138,47 +128,45 @@ impl<'input> SymbolTable<'input> {
 
     fn add_function(
         &mut self,
-        scope_id: NodeId,
+        scope_id: Index,
         definition: &'input ast::VariableDefinition<'input>,
-    ) -> Result<NodeId, CompilerError<'input>> {
-        let scope = self.scope_arena.get_mut(scope_id).unwrap();
-
-        let function_id = self.function_arena.len();
-        self.function_arena.push(Function {
-            id: function_id,
-            function_scope_id: 0,
+    ) -> Result<Index, CompilerError<'input>> {
+        let function_id = self.function_arena.insert(Function {
+            scope_id,
             definition,
         });
-        scope.functions.push(function_id);
+
+        let scope = self.scope_mut(scope_id);
+        scope.functions.insert(definition.identifier, function_id);
 
         Ok(function_id)
     }
 
     fn add_variable(
         &mut self,
-        scope_id: NodeId,
+        scope_id: Index,
         definition: &'input ast::VariableDefinition<'input>,
-    ) -> Result<NodeId, CompilerError<'input>> {
-        let scope = self.scope_arena.get_mut(scope_id).unwrap();
+    ) -> Result<Index, CompilerError<'input>> {
+        let scope = self.scope(scope_id);
 
         if scope.variables.contains_key(definition.identifier) {
             return Err(CompilerError::VariableAlreadyDefined(definition.identifier));
         }
 
-        let variable_id = self.variable_arena.len();
-        self.variable_arena.push(Variable {
-            id: variable_id,
+        let variable_id = self.variable_arena.insert(Variable {
             scope_id,
             definition,
             calls: Vec::new(),
         });
+
+        let scope = self.scope_mut(scope_id);
         scope.variables.insert(definition.identifier, variable_id);
 
         Ok(variable_id)
     }
 
-    fn build_scope(&mut self, scope_id: NodeId) -> Result<(), CompilerError<'input>> {
-        let scope = self.scope_arena.get_mut(scope_id).unwrap();
+    fn build_scope(&mut self, scope_id: Index) -> Result<(), CompilerError<'input>> {
+        let scope = self.scope_mut(scope_id);
 
         for statement in scope.statements {
             match statement {
@@ -191,15 +179,19 @@ impl<'input> SymbolTable<'input> {
                     self.add_variable(scope_id, &definition)?;
 
                     let function_id = self.add_function(scope_id, &definition)?;
-                    let function_scope_id =
-                        self.new_function_scope(scope_id, function_id, statements)?;
+                    let function_scope_id = self.create_scope(
+                        ScopeKind::Function,
+                        Some(scope_id),
+                        Some(function_id),
+                        statements,
+                    )?;
 
                     for parameter in parameters {
                         self.add_variable(function_scope_id, parameter)?;
                     }
 
-                    let function = self.function_arena.get_mut(function_id).unwrap();
-                    function.function_scope_id = function_scope_id
+                    let function = self.function_mut(function_id);
+                    function.scope_id = function_scope_id;
                 }
 
                 ast::Statement::DefinitionStatement { definition, .. } => {
@@ -216,10 +208,10 @@ impl<'input> SymbolTable<'input> {
 impl<'input> SymbolTable<'input> {
     pub fn fetch_variable_by_name(
         &self,
-        scope_id: NodeId,
+        scope_id: Index,
         name: &'input str,
-    ) -> Result<NodeId, CompilerError<'input>> {
-        let scope = self.scope_arena.get(scope_id).unwrap();
+    ) -> Result<Index, CompilerError<'input>> {
+        let scope = self.scope(scope_id);
 
         if let Some(variable_id) = scope.variables.get(name) {
             return Ok(variable_id.to_owned());
@@ -234,9 +226,9 @@ impl<'input> SymbolTable<'input> {
 
     pub fn fetch_variable_by_identifier(
         &self,
-        scope_id: NodeId,
+        scope_id: Index,
         identifier: &'input ast::VariableIdentifier<'input>,
-    ) -> Result<NodeId, CompilerError<'input>> {
+    ) -> Result<Index, CompilerError<'input>> {
         match identifier {
             ast::VariableIdentifier::Identifier { identifier, .. } => {
                 self.fetch_variable_by_name(scope_id, identifier)
@@ -249,7 +241,7 @@ impl<'input> SymbolTable<'input> {
 impl<'input> SymbolTable<'input> {
     fn build_variable_fields_for_expression(
         &mut self,
-        scope_id: NodeId,
+        scope_id: Index,
         expression: &'input ast::Expression<'input>,
     ) -> Result<(), CompilerError<'input>> {
         match expression {
@@ -259,7 +251,7 @@ impl<'input> SymbolTable<'input> {
                 ..
             } => {
                 let variable_id = self.fetch_variable_by_identifier(scope_id, identifier)?;
-                let variable = self.variable_arena.get_mut(variable_id).unwrap();
+                let variable = self.variable_mut(variable_id);
 
                 variable.calls.push(arguments);
             }
@@ -271,7 +263,7 @@ impl<'input> SymbolTable<'input> {
 
     fn build_variable_fields_for_statement(
         &mut self,
-        scope_id: NodeId,
+        scope_id: Index,
         statement: &'input ast::Statement<'input>,
     ) -> Result<(), CompilerError<'input>> {
         match statement {
@@ -299,9 +291,9 @@ impl<'input> SymbolTable<'input> {
 
     fn build_variable_fields_for_scope(
         &mut self,
-        scope_id: NodeId,
+        scope_id: Index,
     ) -> Result<(), CompilerError<'input>> {
-        let scope = self.scope_arena.get_mut(scope_id).unwrap();
+        let scope = self.scope_mut(scope_id);
 
         for statement in scope.statements {
             self.build_variable_fields_for_statement(scope_id, statement)?;
@@ -311,7 +303,7 @@ impl<'input> SymbolTable<'input> {
     }
 
     fn build_variable_fields(&mut self) -> Result<(), CompilerError<'input>> {
-        let scopes = self.scope_arena.iter().map(|v| v.id).collect::<Vec<_>>();
+        let scopes = self.scope_arena.iter().map(|(i, _)| i).collect::<Vec<_>>();
 
         for scope_id in scopes {
             self.build_variable_fields_for_scope(scope_id)?;
@@ -324,7 +316,7 @@ impl<'input> SymbolTable<'input> {
 impl<'input> SymbolTable<'input> {
     fn get_expression_kind(
         &self,
-        scope_id: NodeId,
+        scope_id: Index,
         expression: &'input ast::Expression<'input>,
     ) -> Result<ast::VariableKind, CompilerError<'input>> {
         match expression {
@@ -332,7 +324,7 @@ impl<'input> SymbolTable<'input> {
 
             ast::Expression::VariableExpression { identifier, .. } => {
                 let variable_id = self.fetch_variable_by_identifier(scope_id, identifier)?;
-                let variable = self.variable_arena.get(variable_id).unwrap();
+                let variable = self.variable(variable_id);
 
                 Ok(variable.definition.kind.clone())
             }
@@ -362,7 +354,7 @@ impl<'input> SymbolTable<'input> {
                 }
 
                 let variable_id = self.fetch_variable_by_identifier(scope_id, identifier)?;
-                let variable = self.variable_arena.get(variable_id).unwrap();
+                let variable = self.variable(variable_id);
 
                 match &variable.definition.kind {
                     ast::VariableKind::Function { return_kind, .. } => {
@@ -382,8 +374,8 @@ impl<'input> SymbolTable<'input> {
 }
 
 impl<'input> SymbolTable<'input> {
-    fn check_types_for_variable(&self, variable_id: NodeId) -> Result<(), CompilerError<'input>> {
-        let variable = self.variable_arena.get(variable_id).unwrap();
+    fn check_types_for_variable(&self, variable_id: Index) -> Result<(), CompilerError<'input>> {
+        let variable = self.variable(variable_id);
 
         if variable.calls.len() > 0 {
             let is_kind_fn = match variable.definition.kind {
@@ -427,7 +419,11 @@ impl<'input> SymbolTable<'input> {
     }
 
     fn check_types(&self) -> Result<(), CompilerError<'input>> {
-        let variables = self.variable_arena.iter().map(|v| v.id).collect::<Vec<_>>();
+        let variables = self
+            .variable_arena
+            .iter()
+            .map(|(i, _)| i)
+            .collect::<Vec<_>>();
 
         for variable_id in variables {
             self.check_types_for_variable(variable_id)?;
