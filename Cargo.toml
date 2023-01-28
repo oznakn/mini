@@ -7,13 +7,8 @@ build = "build.rs"
 [dependencies]
 clap = { version = "3.2.23" }
 colored = { version = "2.0.0"}
-cranelift-codegen = { version = "0.92", features = ["all-arch"] }
-cranelift-frontend = { version = "0.92" }
-cranelift-module = { version = "0.92" }
-cranelift-native = { version = "0.92" }
-cranelift-object = { version = "0.92" }
-cranelift-preopt = { version = "0.92" }
 indexmap = { version = "1.9.2"}
+inkwell = { version = "0.1.0", features = ["llvm15-0"] }
 lalrpop-util = { version = "0.19.8", features = ["lexer"] }
 regex = { version = "1" }
 

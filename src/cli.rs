@@ -1,4 +1,5 @@
 use clap::{App, Arg};
+use inkwell::context::Context;
 use std::fs;
 
 use crate::error::CompilerError;
@@ -20,19 +21,14 @@ fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
 
     let symbol_table = st::SymbolTable::from(&program).map_err(|err| err.to_string())?;
 
-    let mut ir_generator = gen::IRGenerator::new(
+    let ir_context = Context::create();
+    gen::IRGenerator::generate(
         &symbol_table,
-        "x86_64-apple-darwin",
+        &ir_context,
         "foo",
         matches.is_present("optimize"),
     )
-    .map_err(|err| err.to_string())?;
-
-    ir_generator.init().map_err(|err| err.to_string())?;
-
-    let result = ir_generator.module.finish();
-    let object_code = result.emit().unwrap();
-    fs::write("foo.o", object_code).unwrap();
+    .map_err(|err| CompilerError::CodeGenError(err.to_string()).to_string())?;
 
     Ok(())
 }
