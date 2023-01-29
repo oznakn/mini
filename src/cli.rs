@@ -1,4 +1,5 @@
 use clap::{App, Arg};
+use indexmap::IndexSet;
 use inkwell::context::Context;
 use inkwell::targets::TargetTriple;
 use std::fs;
@@ -30,6 +31,7 @@ fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
         },
         is_writable: false,
         is_external: false,
+        decorators: IndexSet::new(),
     };
 
     let symbol_table = st::SymbolTable::from(&main_def, &program).map_err(|err| err.to_string())?;

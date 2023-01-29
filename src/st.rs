@@ -75,8 +75,11 @@ impl<'input> SymbolTable<'input> {
         Ok(symbol_table)
     }
 
-    pub fn functions(&self) -> impl Iterator<Item = &Index> {
-        self.function_scope_map.iter().map(move |(id, _)| id)
+    pub fn variables(&self) -> Vec<Index> {
+        self.variable_arena
+            .iter()
+            .map(|(idx, _)| idx)
+            .collect::<Vec<_>>()
     }
 
     pub fn scope(&self, scope_id: &Index) -> &Scope<'input> {
@@ -205,16 +208,17 @@ impl<'input> SymbolTable<'input> {
                     ..
                 } => {
                     let variable_id = self.add_variable(scope_id, &definition, false)?;
-                    let function_scope_id = self.create_scope(Some(*scope_id), statements)?;
 
-                    self.set_function_scope(&variable_id, &function_scope_id);
-                    self.build_scope(&function_scope_id)?;
+                    if !definition.is_external {
+                        let function_scope_id = self.create_scope(Some(*scope_id), statements)?;
 
-                    for parameter in parameters {
-                        self.add_variable(&function_scope_id, parameter, true)?;
-                    }
+                        self.set_function_scope(&variable_id, &function_scope_id);
+                        self.build_scope(&function_scope_id)?;
 
-                    if definition.is_external {
+                        for parameter in parameters {
+                            self.add_variable(&function_scope_id, parameter, true)?;
+                        }
+                    } else {
                         self.external_variable_map
                             .insert(definition.name, variable_id);
                     }

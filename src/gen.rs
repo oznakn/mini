@@ -146,16 +146,20 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     }
 
     fn init(&mut self) -> Result<(), CompilerError<'input>> {
-        for variable_id in self.symbol_table.functions() {
-            let variable = self.symbol_table.variable(variable_id);
+        for variable_id in self.symbol_table.variables() {
+            let variable = self.symbol_table.variable(&variable_id);
 
-            let func_name = if self.symbol_table.main_function.unwrap() == *variable_id {
+            if !variable.is_function() {
+                continue;
+            }
+
+            let func_name = if self.symbol_table.main_function.unwrap() == variable_id {
                 MAIN_FUNCTION_NAME.to_owned()
             } else {
                 variable.definition.name.to_owned()
             };
 
-            self.init_function(func_name.as_str(), *variable_id)?;
+            self.init_function(func_name.as_str(), variable_id)?;
         }
 
         Ok(())
@@ -205,7 +209,11 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             .collect::<Vec<_>>();
 
         for function_id in keys {
-            self.visit_function(&function_id)?;
+            let function_variable = self.symbol_table.variable(&function_id);
+
+            if !function_variable.definition.is_external {
+                self.visit_function(&function_id)?;
+            }
         }
 
         Ok(())
@@ -237,10 +245,6 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
         let scope = self.symbol_table.function_scope(function_variable_id);
         let function = self.functions.get(function_variable_id).unwrap();
-
-        if function.get_linkage() == Linkage::ExternalWeak {
-            return Ok(());
-        }
 
         let basic_block = self.context.append_basic_block(*function, "entry");
         self.builder.position_at_end(basic_block);
@@ -584,51 +588,17 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         {
             match operator {
                 ast::BinaryOperator::Addition => {
-                    let address_type = self.context.i64_type();
-                    let char_type = self.context.i8_type();
-                    let pointer_type = char_type.ptr_type(AddressSpace::default());
-
                     let left = self.translate_expression(left)?.into_pointer_value();
                     let right = self.translate_expression(right)?.into_pointer_value();
 
-                    let left_len = self
-                        .call_internal("strlen", &[left.into()])?
-                        .into_int_value();
-                    let right_len = self
-                        .call_internal("strlen", &[right.into()])?
-                        .into_int_value();
-
-                    let size_with_null = self.builder.build_int_add(
-                        self.builder.build_int_add(left_len, right_len, "addtmp"),
-                        self.context.i64_type().const_int(1, false),
-                        "addtmp",
-                    );
-
-                    let v = self
-                        .builder
-                        .build_array_malloc(char_type, size_with_null, "s")
-                        .unwrap();
-
-                    self.builder.build_memcpy(v, 1, left, 1, left_len).unwrap();
-
-                    let v_offset = self.builder.build_int_to_ptr(
-                        self.builder.build_int_add(
-                            self.builder.build_ptr_to_int(v, address_type, "s"),
-                            left_len,
-                            "tmp",
-                        ),
-                        pointer_type,
-                        "s",
-                    );
-
-                    self.builder
-                        .build_memcpy(v_offset, 1, right, 1, right_len)
-                        .unwrap();
+                    let result = self
+                        .call_internal("str_concat", &[left.into(), right.into()])?
+                        .into_pointer_value();
 
                     self.builder.build_free(left);
                     self.builder.build_free(right);
 
-                    Ok(v.into())
+                    Ok(result.into())
                 }
 
                 _ => unreachable!(),
