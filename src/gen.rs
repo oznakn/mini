@@ -145,14 +145,6 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         self.context.i64_type().const_zero().into()
     }
 
-    fn get_typedef_int(&self) -> BasicValueEnum<'ctx> {
-        self.context.i8_type().const_int(0, false).into()
-    }
-
-    fn get_typedef_float(&self) -> BasicValueEnum<'ctx> {
-        self.context.i8_type().const_int(1, false).into()
-    }
-
     fn init(&mut self) -> Result<(), CompilerError<'input>> {
         for variable_id in self.symbol_table.functions() {
             let variable = self.symbol_table.variable(variable_id);
@@ -591,16 +583,20 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 }
 
                 ast::Constant::String(data) => {
-                    let s = self.builder.build_global_string_ptr(data, "string");
+                    let size_with_null = self
+                        .context
+                        .i32_type()
+                        .const_int((data.len() as u64) + 1, false);
 
-                    let size = self.context.i32_type().const_int(data.len() as u64, false);
                     let v = self
                         .builder
-                        .build_array_malloc(self.context.i8_type(), size, "s")
+                        .build_array_malloc(self.context.i8_type(), size_with_null, "s")
                         .unwrap();
 
+                    let s = self.builder.build_global_string_ptr(data, "string");
+
                     self.builder
-                        .build_memcpy(v, 1, s.as_pointer_value(), 1, size)
+                        .build_memcpy(v, 1, s.as_pointer_value(), 1, size_with_null)
                         .map_err(|err| CompilerError::CodeGenError(err.to_owned()))?;
 
                     Ok(v.into())
