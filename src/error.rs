@@ -41,12 +41,12 @@ impl<'input> fmt::Display for CompilerError<'input> {
 
                 writeln!(f, "{}", s)
             }
-            CompilerError::CliError(err) => write!(f, "{}: {}", "error:".red(), err),
-            CompilerError::CodeGenError(err) => write!(f, "{}: {}", "error:".red(), err),
+            CompilerError::CliError(err) => write!(f, "{} {}", "error:".red(), err),
+            CompilerError::CodeGenError(err) => write!(f, "{} {}", "error:".red(), err),
             CompilerError::VariableAlreadyDefined(v) => {
                 write!(
                     f,
-                    "{}: variable `{}` already defined",
+                    "{} variable `{}` already defined",
                     "error:".red(),
                     v.yellow()
                 )
@@ -54,7 +54,7 @@ impl<'input> fmt::Display for CompilerError<'input> {
             CompilerError::VariableNotDefined(v) => {
                 write!(
                     f,
-                    "{}: variable `{}` not defined",
+                    "{} variable `{}` not defined",
                     "error:".red(),
                     v.yellow()
                 )
@@ -62,7 +62,7 @@ impl<'input> fmt::Display for CompilerError<'input> {
             CompilerError::InvalidFunctionCall(v) => {
                 write!(
                     f,
-                    "{}: function call on variable `{}` invalid",
+                    "{} function call on variable `{}` invalid",
                     "error:".red(),
                     v.yellow(),
                 )
@@ -70,7 +70,7 @@ impl<'input> fmt::Display for CompilerError<'input> {
             CompilerError::InvalidNumberOfArguments(v, expected, got) => {
                 write!(
                     f,
-                    "{}: function `{}` expects {} arguments, but got {}",
+                    "{} function `{}` expects {} arguments, but got {}",
                     "error:".red(),
                     v.yellow(),
                     format!("{}", expected).yellow(),
@@ -80,7 +80,7 @@ impl<'input> fmt::Display for CompilerError<'input> {
             CompilerError::VariableTypeCannotBeInfered(v) => {
                 write!(
                     f,
-                    "{}: type of variable `{}` cannot be infered",
+                    "{} type of variable `{}` cannot be infered",
                     "error:".red(),
                     v.yellow()
                 )
@@ -88,7 +88,7 @@ impl<'input> fmt::Display for CompilerError<'input> {
             CompilerError::InvalidArgumentType(v, expected, got) => {
                 write!(
                     f,
-                    "{}: function `{}` expects argument type `{}`, but got `{}`",
+                    "{} function `{}` expects argument type `{}`, but got `{}`",
                     "error:".red(),
                     v.yellow(),
                     expected.get_name().yellow(),
@@ -98,7 +98,7 @@ impl<'input> fmt::Display for CompilerError<'input> {
             CompilerError::InvalidAssignment(v, expected, got) => {
                 write!(
                     f,
-                    "{}: cannot assign `{}` to variable `{}` of type `{}`",
+                    "{} cannot assign `{}` to variable `{}` of type `{}`",
                     "error:".red(),
                     got.get_name().yellow(),
                     v.yellow(),
@@ -108,7 +108,7 @@ impl<'input> fmt::Display for CompilerError<'input> {
             CompilerError::CannotAssignConstVariable(v) => {
                 write!(
                     f,
-                    "{}: cannot assign to const variable `{}`",
+                    "{} cannot assign to const variable `{}`",
                     "error:".red(),
                     v.yellow()
                 )
@@ -116,7 +116,7 @@ impl<'input> fmt::Display for CompilerError<'input> {
             CompilerError::CannotReturnFromGlobalScope => {
                 write!(
                     f,
-                    "{}: cannot use `{}` in global scope",
+                    "{} cannot use `{}` in global scope",
                     "error:".red(),
                     "return".yellow()
                 )

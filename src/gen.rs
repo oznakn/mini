@@ -8,7 +8,7 @@ use inkwell::module::{Linkage, Module};
 use inkwell::targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetTriple};
 use inkwell::types::{BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
-use inkwell::OptimizationLevel;
+use inkwell::{AddressSpace, OptimizationLevel};
 
 use crate::ast;
 use crate::error::CompilerError;
@@ -80,6 +80,8 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         );
 
         if let Some(target_machine) = target_machine {
+            // println!("{}", self.module.print_to_string().to_str().unwrap());
+
             target_machine
                 .write_to_file(&self.module, inkwell::targets::FileType::Object, &tmp_file)
                 .map_err(|err| {
@@ -129,7 +131,11 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 }
             }
 
-            ast::VariableKind::Undefined => self.context.i64_type().as_basic_type_enum(),
+            ast::VariableKind::String => self
+                .context
+                .i8_type()
+                .ptr_type(AddressSpace::default())
+                .as_basic_type_enum(),
 
             _ => unimplemented!(),
         }
@@ -567,6 +573,21 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                     Ok(v.into())
                 }
 
+                ast::Constant::Boolean(data) => {
+                    let data = if *data { 1 } else { 0 };
+
+                    let i1_type = self.context.bool_type();
+                    let v = i1_type.const_int(data, false);
+
+                    Ok(v.into())
+                }
+
+                ast::Constant::String(data) => {
+                    let v = self.builder.build_global_string_ptr(data, "string");
+
+                    Ok(v.as_pointer_value().into())
+                }
+
                 _ => unimplemented!(),
             },
 
@@ -637,7 +658,21 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 }
             }
 
-            _ => unimplemented!(),
+            ast::Expression::AssignmentExpression {
+                identifier,
+                expression,
+                ..
+            } => {
+                let ptr = self.get_pointer_for_identifier(identifier);
+
+                let v = self.translate_expression(expression)?;
+
+                self.builder.build_store(*ptr, v);
+
+                Ok(v)
+            }
+
+            ast::Expression::Empty => unreachable!("Empty expression"),
         }
     }
 

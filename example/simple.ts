@@ -1,3 +1,9 @@
-declare function echo(n: number): number;
+declare function echo_number(n: number): number;
+declare function echo_string(n: string): number;
 
-echo(5);
+const s: string = 'selam';
+echo_string(s);
+
+let n: number = 5;
+n = 10;
+echo_number(n);

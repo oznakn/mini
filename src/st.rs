@@ -282,9 +282,16 @@ impl<'input> SymbolTable<'input> {
                 Ok(kind)
             }
 
-            ast::Expression::AssignmentExpression { expression: e, .. } => {
+            ast::Expression::AssignmentExpression {
+                expression: e,
+                identifier,
+                ..
+            } => {
+                let variable_id = self.fetch_variable_by_identifier(scope_id, identifier)?;
+
                 let kind = self.visit_expression(scope_id, e)?;
 
+                self.set_identifier_ref(identifier, &variable_id);
                 self.set_expression_kind(expression, kind.clone());
 
                 Ok(kind)
@@ -334,7 +341,7 @@ impl<'input> SymbolTable<'input> {
                 }
             }
 
-            ast::Expression::Empty => unimplemented!(),
+            ast::Expression::Empty => unreachable!("Empty expression"),
         }
     }
 

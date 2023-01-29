@@ -3,8 +3,12 @@
 
 #include <stdio.h>
 
-void echo(int n) {
+void echo_number(int n) {
     printf("%d\n", n);
+}
+
+void echo_string(const char *s) {
+    printf("%s\n", s);
 }
 
 #endif
