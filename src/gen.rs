@@ -4,15 +4,18 @@ use generational_arena::Index;
 use indexmap::IndexMap;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
-use inkwell::module::Module;
+use inkwell::module::{Linkage, Module};
 use inkwell::targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine};
-use inkwell::types::BasicTypeEnum;
+use inkwell::types::{BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
 use inkwell::OptimizationLevel;
 
 use crate::ast;
 use crate::error::CompilerError;
 use crate::st;
+
+const MAIN_FUNCTION_NAME: &str = "main";
+const BUILTIN_PREFIX: &str = "__builtin_";
 
 pub struct IRGenerator<'input, 'ctx> {
     pub optimize: bool,
@@ -121,11 +124,13 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         match variable_kind {
             ast::VariableKind::Number { is_float } => {
                 if *is_float {
-                    self.context.f64_type().into()
+                    self.context.f64_type().as_basic_type_enum()
                 } else {
-                    self.context.i64_type().into()
+                    self.context.i64_type().as_basic_type_enum()
                 }
             }
+
+            ast::VariableKind::Undefined => self.context.i64_type().as_basic_type_enum(),
 
             _ => unimplemented!(),
         }
@@ -137,18 +142,63 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
     fn init(&mut self) -> Result<(), CompilerError<'input>> {
         for variable_id in self.symbol_table.functions() {
+            let mut is_external = false;
+
             let variable = self.symbol_table.variable(variable_id);
 
             let func_name = if self.symbol_table.main_function.unwrap() == *variable_id {
-                "main".to_owned()
+                MAIN_FUNCTION_NAME.to_owned()
+            } else if variable.definition.name.starts_with(BUILTIN_PREFIX) {
+                is_external = true;
+
+                let suffix = variable.definition.name[BUILTIN_PREFIX.len()..].to_owned();
+
+                suffix
             } else {
-                format!("f{}", variable.definition.name)
+                variable.definition.name.to_owned()
             };
 
-            self.init_function(func_name.as_str(), *variable_id)?;
+            self.init_function(func_name.as_str(), *variable_id, is_external)?;
         }
 
         Ok(())
+    }
+
+    fn init_function(
+        &mut self,
+        name: &str,
+        function_variable_id: Index,
+        is_external: bool,
+    ) -> Result<(), CompilerError<'input>> {
+        let linkage = if is_external {
+            Some(Linkage::ExternalWeak)
+        } else {
+            None
+        };
+
+        let function = self.symbol_table.variable(&function_variable_id);
+
+        if let ast::VariableKind::Function {
+            parameters,
+            return_kind,
+        } = &function.definition.kind
+        {
+            let native_return_type = self.convert_kind_to_native(return_kind.as_ref());
+            let native_parameters = parameters
+                .iter()
+                .map(|k| self.convert_kind_to_native(k))
+                .map(|t| t.into())
+                .collect::<Vec<_>>();
+
+            let fn_type = native_return_type.fn_type(native_parameters.as_slice(), false);
+            let fn_value = self.module.add_function(name, fn_type, linkage);
+
+            self.functions.insert(function_variable_id, fn_value);
+
+            Ok(())
+        } else {
+            unreachable!()
+        }
     }
 
     fn compile(&mut self) -> Result<(), CompilerError<'input>> {
@@ -165,19 +215,6 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         Ok(())
     }
 
-    fn init_function(
-        &mut self,
-        name: &str,
-        function_variable_id: Index,
-    ) -> Result<(), CompilerError<'input>> {
-        let fn_type = self.context.i64_type().fn_type(&[], false);
-        let fn_value = self.module.add_function(name, fn_type, None);
-
-        self.functions.insert(function_variable_id, fn_value);
-
-        Ok(())
-    }
-
     fn visit_function(
         &mut self,
         function_variable_id: &Index,
@@ -186,6 +223,10 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
         let scope = self.symbol_table.function_scope(function_variable_id);
         let function = self.functions.get(function_variable_id).unwrap();
+
+        if function.get_linkage() == Linkage::ExternalWeak {
+            return Ok(());
+        }
 
         let basic_block = self.context.append_basic_block(*function, "entry");
         self.builder.position_at_end(basic_block);
@@ -512,13 +553,25 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 Ok(v)
             }
 
-            ast::Expression::CallExpression { identifier, .. } => {
+            ast::Expression::CallExpression {
+                identifier,
+                arguments,
+                ..
+            } => {
+                let arguments = arguments
+                    .iter()
+                    .map(|a| self.translate_expression(a))
+                    .collect::<Result<Vec<_>, _>>()?
+                    .iter()
+                    .map(|e| (*e).into())
+                    .collect::<Vec<_>>();
+
                 let function_variable_id = self.symbol_table.identifier_ref(identifier);
                 let function = self.functions.get(function_variable_id).unwrap();
 
                 let v = self
                     .builder
-                    .build_call(*function, &[], "tmp")
+                    .build_call(*function, &arguments.as_slice(), "tmp")
                     .try_as_basic_value()
                     .left()
                     .unwrap();

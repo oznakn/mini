@@ -1,9 +1,11 @@
-function y(): number {
-    return 10;
+function __builtin_print_number(): void {
+
 }
 
-function x(): number {
-    return y();
+function echo(n: number): number {
+    // __builtin_print_number('printf', 1, n);
+
+    return n;
 }
 
-return x();
+return echo(1);
