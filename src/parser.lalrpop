@@ -33,6 +33,7 @@ match {
     ")",
     "[",
     "]",
+    "?",
 
     "...",
     "let",
@@ -104,7 +105,7 @@ FunctionDecorators: IndexSet<&'input str> = {
 };
 
 FunctionParameter: (ast::VariableDefinition<'input>, ast::ParameterKind) = {
-    <l1:@L> <spread:"..."?> <name:IdentifierName> <kind:(":" <VariableKind>)?> <l2:@R> => {
+    <l1:@L> <rest:"..."?> <name:IdentifierName> <optional:"?"?> <kind:(":" <VariableKind>)?> <l2:@R> => {
         let kind = kind.unwrap_or(ast::VariableKind::Any);
 
         let definition = ast::VariableDefinition {
@@ -118,7 +119,8 @@ FunctionParameter: (ast::VariableDefinition<'input>, ast::ParameterKind) = {
 
         let param_kind = ast::ParameterKind {
             sub_kind: kind,
-            is_spread: spread.is_some(),
+            is_optional: optional.is_some(),
+            is_rest: rest.is_some(),
         };
 
         (definition, param_kind)

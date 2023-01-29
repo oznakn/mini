@@ -449,18 +449,24 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
                 let mut has_switched_to_rest = false;
                 for (index, param) in parameters.iter().enumerate() {
-                    if has_switched_to_rest || param.is_spread {
+                    let exp = arguments.get(index);
+
+                    if exp.is_none() && !param.is_optional {
+                        panic!("Missing argument for function call"); // Handle here before typecheck
+                    }
+
+                    let v = if exp.is_some() {
+                        self.translate_expression(arguments.get(index).unwrap())?
+                    } else {
+                        self.val_type.const_zero()
+                    };
+
+                    if has_switched_to_rest || param.is_rest {
                         has_switched_to_rest = true;
 
-                        rest_values.push(
-                            self.translate_expression(arguments.get(index).unwrap())?
-                                .into(),
-                        )
+                        rest_values.push(v.into())
                     } else {
-                        argument_values.push(
-                            self.translate_expression(arguments.get(index).unwrap())?
-                                .into(),
-                        )
+                        argument_values.push(v.into())
                     }
                 }
 

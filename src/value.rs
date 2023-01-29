@@ -1,7 +1,8 @@
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub struct ParameterKind {
     pub sub_kind: VariableKind,
-    pub is_spread: bool,
+    pub is_rest: bool,
+    pub is_optional: bool,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
