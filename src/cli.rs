@@ -22,7 +22,7 @@ fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
         .map_err(|err| CompilerError::ParserError(err).to_string())?;
 
     let main_def = ast::VariableDefinition {
-        location: (0, 0),
+        location: (0, content.len()),
         name: "main",
         kind: ast::VariableKind::Function {
             parameters: Vec::new(),

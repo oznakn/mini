@@ -7,7 +7,7 @@ use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
 use inkwell::targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetTriple};
 use inkwell::types::{BasicType, BasicTypeEnum};
-use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
+use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, FunctionValue, PointerValue};
 use inkwell::{AddressSpace, OptimizationLevel};
 
 use crate::ast;
@@ -211,6 +211,24 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         Ok(())
     }
 
+    fn call_internal(
+        &self,
+        name: &'input str,
+        args: &[BasicMetadataValueEnum<'ctx>],
+    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
+        let function_variable_id = self.symbol_table.external_variable(name);
+        let function = self.functions.get(function_variable_id).unwrap();
+
+        let v = self
+            .builder
+            .build_call(*function, args, "tmp")
+            .try_as_basic_value()
+            .left()
+            .unwrap();
+
+        Ok(v)
+    }
+
     fn visit_function(
         &mut self,
         function_variable_id: &Index,
@@ -343,7 +361,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     fn translate_expression_into_float(
         &self,
         expression: &'input ast::Expression<'input>,
-    ) -> Result<BasicValueEnum, CompilerError<'input>> {
+    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
         let translated = self.translate_expression(expression)?;
 
         match translated {
@@ -366,7 +384,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     fn translate_int_binary_expression(
         &self,
         expression: &'input ast::Expression<'input>,
-    ) -> Result<BasicValueEnum, CompilerError<'input>> {
+    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
         if let ast::Expression::BinaryExpression {
             operator,
             left,
@@ -424,7 +442,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     fn translate_float_binary_expression(
         &self,
         expression: &'input ast::Expression<'input>,
-    ) -> Result<BasicValueEnum, CompilerError<'input>> {
+    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
         if let ast::Expression::BinaryExpression {
             operator,
             left,
@@ -482,7 +500,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     fn translate_int_unary_expression(
         &self,
         expression: &'input ast::Expression<'input>,
-    ) -> Result<BasicValueEnum, CompilerError<'input>> {
+    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
         if let ast::Expression::UnaryExpression {
             operator,
             expression,
@@ -519,7 +537,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     fn translate_float_unary_expression(
         &self,
         expression: &'input ast::Expression<'input>,
-    ) -> Result<BasicValueEnum, CompilerError<'input>> {
+    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
         if let ast::Expression::UnaryExpression {
             operator,
             expression,
@@ -553,10 +571,77 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         }
     }
 
+    fn translate_string_binary_expression(
+        &self,
+        expression: &'input ast::Expression<'input>,
+    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
+        if let ast::Expression::BinaryExpression {
+            operator,
+            left,
+            right,
+            ..
+        } = expression
+        {
+            match operator {
+                ast::BinaryOperator::Addition => {
+                    let address_type = self.context.i64_type();
+                    let char_type = self.context.i8_type();
+                    let pointer_type = char_type.ptr_type(AddressSpace::default());
+
+                    let left = self.translate_expression(left)?.into_pointer_value();
+                    let right = self.translate_expression(right)?.into_pointer_value();
+
+                    let left_len = self
+                        .call_internal("strlen", &[left.into()])?
+                        .into_int_value();
+                    let right_len = self
+                        .call_internal("strlen", &[right.into()])?
+                        .into_int_value();
+
+                    let size_with_null = self.builder.build_int_add(
+                        self.builder.build_int_add(left_len, right_len, "addtmp"),
+                        self.context.i64_type().const_int(1, false),
+                        "addtmp",
+                    );
+
+                    let v = self
+                        .builder
+                        .build_array_malloc(char_type, size_with_null, "s")
+                        .unwrap();
+
+                    self.builder.build_memcpy(v, 1, left, 1, left_len).unwrap();
+
+                    let v_offset = self.builder.build_int_to_ptr(
+                        self.builder.build_int_add(
+                            self.builder.build_ptr_to_int(v, address_type, "s"),
+                            left_len,
+                            "tmp",
+                        ),
+                        pointer_type,
+                        "s",
+                    );
+
+                    self.builder
+                        .build_memcpy(v_offset, 1, right, 1, right_len)
+                        .unwrap();
+
+                    self.builder.build_free(left);
+                    self.builder.build_free(right);
+
+                    Ok(v.into())
+                }
+
+                _ => unreachable!(),
+            }
+        } else {
+            unreachable!()
+        }
+    }
+
     fn translate_expression(
         &self,
         expression: &'input ast::Expression<'input>,
-    ) -> Result<BasicValueEnum, CompilerError<'input>> {
+    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
         match expression {
             ast::Expression::ConstantExpression { value, .. } => match value {
                 ast::Constant::Integer(data) => {
@@ -653,6 +738,11 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                             self.translate_int_binary_expression(expression)
                         }
                     }
+
+                    ast::VariableKind::String => {
+                        self.translate_string_binary_expression(expression)
+                    }
+
                     _ => unimplemented!(),
                 }
             }

@@ -1,13 +1,8 @@
+declare function strlen(s: string): number;
 declare function echo_number(n: number): number;
 declare function echo_string(n: string): number;
 
-let s: string = 'selam';
-echo_string(s);
-
-s = 'selam2';
-echo_string(s);
-
-s = 'selam3';
+let s: string = 'selam' + '1';
 echo_string(s);
 
 let n: number = 5;
