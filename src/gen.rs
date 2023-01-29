@@ -430,6 +430,75 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         }
     }
 
+    fn translate_call_expression(
+        &self,
+        expression: &'input ast::Expression<'input>,
+    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
+        if let ast::Expression::CallExpression {
+            identifier,
+            arguments,
+            ..
+        } = expression
+        {
+            let function_variable_id = self.symbol_table.identifier_ref(identifier);
+            let function = self.symbol_table.variable(function_variable_id);
+
+            if let ast::VariableKind::Function { parameters, .. } = &function.definition.kind {
+                let mut argument_values: Vec<BasicMetadataValueEnum<'ctx>> = Vec::new();
+                let mut rest_values: Vec<BasicMetadataValueEnum<'ctx>> = Vec::new();
+
+                let mut has_switched_to_rest = false;
+                for (index, param) in parameters.iter().enumerate() {
+                    if has_switched_to_rest || param.is_spread {
+                        has_switched_to_rest = true;
+
+                        rest_values.push(
+                            self.translate_expression(arguments.get(index).unwrap())?
+                                .into(),
+                        )
+                    } else {
+                        argument_values.push(
+                            self.translate_expression(arguments.get(index).unwrap())?
+                                .into(),
+                        )
+                    }
+                }
+
+                if !rest_values.is_empty() {
+                    let array_size = self
+                        .context
+                        .i64_type()
+                        .const_int(rest_values.len() as u64, false);
+
+                    let array = self
+                        .call_builtin("new_array_val", &[array_size.into()])?
+                        .into_pointer_value();
+
+                    for v in rest_values.iter() {
+                        self.call_builtin("val_array_push", &[array.into(), (*v).into()])?;
+                    }
+
+                    argument_values.push(array.into());
+                }
+
+                let fn_value = self.functions.get(function_variable_id).unwrap();
+
+                let v = self
+                    .builder
+                    .build_call(*fn_value, &argument_values.as_slice(), "tmp")
+                    .try_as_basic_value()
+                    .left()
+                    .unwrap();
+
+                Ok(v)
+            } else {
+                unreachable!()
+            }
+        } else {
+            unreachable!()
+        }
+    }
+
     fn translate_expression(
         &self,
         expression: &'input ast::Expression<'input>,
@@ -481,36 +550,12 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
             ast::Expression::UnaryExpression { .. } => self.translate_unary_expression(expression),
 
+            ast::Expression::CallExpression { .. } => self.translate_call_expression(expression),
+
             ast::Expression::VariableExpression { identifier, .. } => {
                 let ptr = self.get_pointer_for_identifier(identifier);
 
                 let v = self.builder.build_load(*ptr, "temp");
-
-                Ok(v)
-            }
-
-            ast::Expression::CallExpression {
-                identifier,
-                arguments,
-                ..
-            } => {
-                let arguments = arguments
-                    .iter()
-                    .map(|a| self.translate_expression(a))
-                    .collect::<Result<Vec<_>, _>>()?
-                    .iter()
-                    .map(|e| (*e).into())
-                    .collect::<Vec<_>>();
-
-                let function_variable_id = self.symbol_table.identifier_ref(identifier);
-                let function = self.functions.get(function_variable_id).unwrap();
-
-                let v = self
-                    .builder
-                    .build_call(*function, &arguments.as_slice(), "tmp")
-                    .try_as_basic_value()
-                    .left()
-                    .unwrap();
 
                 Ok(v)
             }

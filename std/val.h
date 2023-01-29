@@ -9,12 +9,14 @@
 #include <string.h>
 
 #include "str.h"
+#include "array.h"
 
 typedef enum  {
     VAL_NULL,
     VAL_INT,
     VAL_FLOAT,
     VAL_STR,
+    VAL_ARRAY,
 } val_type_t;
 
 typedef struct {
@@ -24,6 +26,7 @@ typedef struct {
         int64_t i64;
         double f64;
         str_t str;
+        array_t array;
     };
 } val_t;
 
@@ -105,6 +108,15 @@ val_t *new_str_val(char *s) {
     new_str(&result->str, s);
 
     DEBUG("new str: %s, %p", result->str.data, result);
+
+    return result;
+}
+
+val_t *new_array_val(uint64_t len) {
+    val_t *result = new_val(VAL_ARRAY);
+    new_array(&result->array, len);
+
+    DEBUG("new array: %lld, %p", result->array.len, result);
 
     return result;
 }
@@ -221,5 +233,18 @@ val_t *val_op_div(val_t *v1, val_t *v2) {
 
     return result;
 }
+
+void *val_array_push(val_t *items, val_t *v) {
+    if (items->type != VAL_ARRAY) {
+        assert(false);
+    }
+
+    array_push(&items->array, v);
+
+    link_val(v);
+
+    return NULL;
+}
+
 
 #endif

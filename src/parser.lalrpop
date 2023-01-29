@@ -33,6 +33,8 @@ match {
     ")",
     "[",
     "]",
+
+    "...",
     "let",
     "const",
     "any",
@@ -101,8 +103,30 @@ FunctionDecorators: IndexSet<&'input str> = {
     }
 };
 
+FunctionParameter: (ast::VariableDefinition<'input>, ast::ParameterKind) = {
+    <l1:@L> <spread:"..."?> <name:IdentifierName> <kind:(":" <VariableKind>)?> <l2:@R> => {
+        let kind = kind.unwrap_or(ast::VariableKind::Any);
+
+        let definition = ast::VariableDefinition {
+            location: (l1, l2),
+            name,
+            kind: kind.clone(),
+            is_writable: true,
+            is_external: false,
+            decorators: IndexSet::new(),
+        };
+
+        let param_kind = ast::ParameterKind {
+            sub_kind: kind,
+            is_spread: spread.is_some(),
+        };
+
+        (definition, param_kind)
+    }
+}
+
 FunctionStatement: ast::Statement<'input> = {
-    <l1:@L> <decorators:FunctionDecorators> <is_external:"declare"?> "function" <ll1:@L> <name:IdentifierName> <ll2:@R> "(" <parameters:CommaList<VariableDefinition>> ")" ":" <return_kind:FunctionReturnKind> <l2:@R> <statements:Body?> => {
+    <l1:@L> <decorators:FunctionDecorators> <is_external:"declare"?> "function" <ll1:@L> <name:IdentifierName> <ll2:@R> "(" <parameters:CommaList<FunctionParameter>> ")" <return_kind:(":" <FunctionReturnKind>)?> <l2:@R> <statements:Body?> => {
         if is_external.is_none() && statements.is_none() {
             panic!("Function must have a body");
         }
@@ -117,17 +141,20 @@ FunctionStatement: ast::Statement<'input> = {
                 location: (ll1, ll2),
                 name,
                 kind: ast::VariableKind::Function {
-                    return_kind: Box::new(return_kind),
+                    return_kind: Box::new(return_kind.unwrap_or(ast::VariableKind::Any)),
                     parameters: parameters
                             .iter()
-                            .map(|parameter| parameter.kind.clone())
+                            .map(|(_, p)| p.clone())
                             .collect(),
                 },
                 is_writable: false,
                 is_external: is_external.is_some(),
                 decorators,
             },
-            parameters,
+            parameters: parameters
+                        .iter()
+                        .map(|(p, _)| p.clone())
+                        .collect(),
             statements: statements.unwrap_or_default(),
         }
     },
@@ -311,4 +338,7 @@ VariableKind: ast::VariableKind = {
     "any" => ast::VariableKind::Any,
     "string" => ast::VariableKind::String,
     "number" => ast::VariableKind::Number,
+    <v:VariableKind> "[" "]" => ast::VariableKind::Array {
+        kind: Box::new(v),
+    },
 };

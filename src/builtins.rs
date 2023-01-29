@@ -40,6 +40,11 @@ pub fn create_builtin_functions<'ctx>(
     );
 
     map.insert(
+        "new_array_val",
+        val_type.fn_type(&[context.i64_type().into()], false),
+    );
+
+    map.insert(
         "val_op_add",
         val_type.fn_type(&[val_type.into(), val_type.into()], false),
     );
@@ -62,6 +67,11 @@ pub fn create_builtin_functions<'ctx>(
     map.insert("val_op_pos", val_type.fn_type(&[val_type.into()], false));
     map.insert("val_op_neg", val_type.fn_type(&[val_type.into()], false));
     map.insert("val_op_not", val_type.fn_type(&[val_type.into()], false));
+
+    map.insert(
+        "val_array_push",
+        val_type.fn_type(&[val_type.into(), val_type.into()], false),
+    );
 
     map.insert("link_val", val_type.fn_type(&[val_type.into()], false));
     map.insert("unlink_val", val_type.fn_type(&[val_type.into()], false));

@@ -1,4 +1,10 @@
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub struct ParameterKind {
+    pub sub_kind: VariableKind,
+    pub is_spread: bool,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum VariableKind {
     Undefined,
     Null,
@@ -7,8 +13,11 @@ pub enum VariableKind {
     String,
     Number,
     Function {
-        parameters: Vec<VariableKind>,
+        parameters: Vec<ParameterKind>,
         return_kind: Box<VariableKind>,
+    },
+    Array {
+        kind: Box<VariableKind>,
     },
 }
 
@@ -32,6 +41,7 @@ impl VariableKind {
             VariableKind::String => "string",
             VariableKind::Number { .. } => "number",
             VariableKind::Function { .. } => "function",
+            VariableKind::Array { .. } => "object",
         }
     }
 
