@@ -10,6 +10,8 @@ function f(a: number, b?: string) {
 // echo(s);
 f(10, 'merhaba');
 
+echo([55, 10, 15]);
+
 // echo(10 * 10);
 // echo(10 / 10.5);
 // echo(10 / 10);

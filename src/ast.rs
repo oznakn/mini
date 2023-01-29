@@ -90,6 +90,10 @@ pub enum Expression<'input> {
         location: (usize, usize),
         value: Constant<'input>,
     },
+    ArrayExpression {
+        location: (usize, usize),
+        items: Vec<Expression<'input>>,
+    },
     VariableExpression {
         location: (usize, usize),
         identifier: VariableIdentifier<'input>,

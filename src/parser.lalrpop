@@ -33,6 +33,7 @@ match {
     ")",
     "[",
     "]",
+    "[]",
     "?",
 
     "...",
@@ -187,17 +188,24 @@ DefinitionStatement: ast::Statement<'input> = {
     },
 }
 
-Expression: ast::Expression<'input> = {
-    AssignmentExpression,
-    BinaryExpression,
-};
-
 AssignmentExpression: ast::Expression<'input> =
     <l1:@L> <identifier:VariableIdentifier> "=" <e:Expression> <l2:@R> => ast::Expression::AssignmentExpression {
         location: (l1, l2),
         identifier,
         expression: Box::new(e),
     };
+
+ArrayExpression: ast::Expression<'input> =
+    <l1:@L> "[" <items:CommaList<Expression>> "]" <l2:@R> => ast::Expression::ArrayExpression {
+        location: (l1, l2),
+        items,
+    };
+
+Expression: ast::Expression<'input> = {
+    AssignmentExpression,
+    ArrayExpression,
+    BinaryExpression,
+};
 
 Term<S, O, E>: ast::Expression<'input> = {
     <l1:@L> <left:S> <operator:O> <right:E> <l2:@R> => ast::Expression::BinaryExpression {
@@ -340,7 +348,7 @@ VariableKind: ast::VariableKind = {
     "any" => ast::VariableKind::Any,
     "string" => ast::VariableKind::String,
     "number" => ast::VariableKind::Number,
-    <v:VariableKind> "[" "]" => ast::VariableKind::Array {
+    <v:VariableKind> "[]" => ast::VariableKind::Array {
         kind: Box::new(v),
     },
 };

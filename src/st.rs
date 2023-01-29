@@ -329,6 +329,20 @@ impl<'input> SymbolTable<'input> {
                 Ok(kind)
             }
 
+            ast::Expression::ArrayExpression { items, .. } => {
+                for e in items {
+                    self.visit_expression(scope_id, e)?;
+                }
+
+                let kind = ast::VariableKind::Array {
+                    kind: Box::new(ast::VariableKind::Any),
+                };
+
+                self.set_expression_kind(expression, kind.clone());
+
+                Ok(kind)
+            }
+
             ast::Expression::CallExpression {
                 identifier,
                 arguments,

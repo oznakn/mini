@@ -558,6 +558,21 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
             ast::Expression::CallExpression { .. } => self.translate_call_expression(expression),
 
+            ast::Expression::ArrayExpression { items, .. } => {
+                let array_size = self.context.i64_type().const_int(items.len() as u64, false);
+
+                let array = self
+                    .call_builtin("new_array_val", &[array_size.into()])?
+                    .into_pointer_value();
+
+                for v in items.iter() {
+                    let v = self.translate_expression(v)?;
+                    self.call_builtin("val_array_push", &[array.into(), v.into()])?;
+                }
+
+                Ok(array.into())
+            }
+
             ast::Expression::VariableExpression { identifier, .. } => {
                 let ptr = self.get_pointer_for_identifier(identifier);
 
