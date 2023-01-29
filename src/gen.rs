@@ -443,63 +443,61 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             let function_variable_id = self.symbol_table.identifier_ref(identifier);
             let function = self.symbol_table.variable(function_variable_id);
 
-            if let ast::VariableKind::Function { parameters, .. } = &function.definition.kind {
-                let mut argument_values: Vec<BasicMetadataValueEnum<'ctx>> = Vec::new();
-                let mut rest_values: Vec<BasicMetadataValueEnum<'ctx>> = Vec::new();
+            let parameters = function.get_parameters();
 
-                let mut has_switched_to_rest = false;
-                for (index, param) in parameters.iter().enumerate() {
-                    let exp = arguments.get(index);
+            let mut argument_values: Vec<BasicMetadataValueEnum<'ctx>> = Vec::new();
+            let mut rest_values: Vec<BasicMetadataValueEnum<'ctx>> = Vec::new();
 
-                    if exp.is_none() && !param.is_optional {
-                        panic!("Missing argument for function call"); // Handle here before typecheck
-                    }
+            let mut has_switched_to_rest = false;
+            for (index, param) in parameters.iter().enumerate() {
+                let exp = arguments.get(index);
 
-                    let v = if exp.is_some() {
-                        self.translate_expression(arguments.get(index).unwrap())?
-                    } else {
-                        self.val_type.const_zero()
-                    };
-
-                    if has_switched_to_rest || param.is_rest {
-                        has_switched_to_rest = true;
-
-                        rest_values.push(v.into())
-                    } else {
-                        argument_values.push(v.into())
-                    }
+                if exp.is_none() && !param.is_optional {
+                    panic!("Missing argument for function call"); // Handle here before typecheck
                 }
 
-                if !rest_values.is_empty() {
-                    let array_size = self
-                        .context
-                        .i64_type()
-                        .const_int(rest_values.len() as u64, false);
+                let v = if exp.is_some() {
+                    self.translate_expression(arguments.get(index).unwrap())?
+                } else {
+                    self.val_type.const_zero()
+                };
 
-                    let array = self
-                        .call_builtin("new_array_val", &[array_size.into()])?
-                        .into_pointer_value();
+                if has_switched_to_rest || param.is_rest {
+                    has_switched_to_rest = true;
 
-                    for v in rest_values.iter() {
-                        self.call_builtin("val_array_push", &[array.into(), (*v).into()])?;
-                    }
-
-                    argument_values.push(array.into());
+                    rest_values.push(v.into())
+                } else {
+                    argument_values.push(v.into())
                 }
-
-                let fn_value = self.functions.get(function_variable_id).unwrap();
-
-                let v = self
-                    .builder
-                    .build_call(*fn_value, &argument_values.as_slice(), "tmp")
-                    .try_as_basic_value()
-                    .left()
-                    .unwrap();
-
-                Ok(v)
-            } else {
-                unreachable!()
             }
+
+            if !rest_values.is_empty() {
+                let array_size = self
+                    .context
+                    .i64_type()
+                    .const_int(rest_values.len() as u64, false);
+
+                let array = self
+                    .call_builtin("new_array_val", &[array_size.into()])?
+                    .into_pointer_value();
+
+                for v in rest_values.iter() {
+                    self.call_builtin("val_array_push", &[array.into(), (*v).into()])?;
+                }
+
+                argument_values.push(array.into());
+            }
+
+            let fn_value = self.functions.get(function_variable_id).unwrap();
+
+            let v = self
+                .builder
+                .build_call(*fn_value, &argument_values.as_slice(), "tmp")
+                .try_as_basic_value()
+                .left()
+                .unwrap();
+
+            Ok(v)
         } else {
             unreachable!()
         }

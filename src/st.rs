@@ -23,9 +23,16 @@ pub struct Variable<'input> {
 
 impl<'input> Variable<'input> {
     pub fn is_function(&self) -> bool {
-        match self.definition.kind {
+        match &self.definition.kind {
             ast::VariableKind::Function { .. } => true,
             _ => false,
+        }
+    }
+
+    pub fn get_parameters(&self) -> &Vec<ast::ParameterKind> {
+        match &self.definition.kind {
+            ast::VariableKind::Function { parameters, .. } => parameters,
+            _ => unreachable!(),
         }
     }
 }
