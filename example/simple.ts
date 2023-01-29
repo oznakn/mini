@@ -1,12 +1,13 @@
 // @ts-ignore
-@builtin declare function new_str(s1: string, s2: string): string;
+declare function str_concat(s1: string, s2: string): string;
 // @ts-ignore
-@builtin declare function str_concat(s1: string, s2: string): string;
-// @ts-ignore
-@builtin declare function str_move(s: string): number;
-
 declare function echo_number(n: number): number;
+// @ts-ignore
 declare function echo_string(n: string): number;
+
+function x(): number {
+    return 10;
+}
 
 let s: string = 'selam' + '1';
 echo_string(s);

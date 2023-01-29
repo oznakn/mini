@@ -40,8 +40,6 @@ pub struct SymbolTable<'input> {
     function_scope_map: IndexMap<Index, Index>,
     expression_kind_map: IndexMap<ByAddress<&'input ast::Expression<'input>>, ast::VariableKind>,
 
-    external_variable_map: IndexMap<&'input str, Index>,
-
     definition_ref_map: IndexMap<ByAddress<&'input ast::VariableDefinition<'input>>, Index>,
     identifier_ref_map: IndexMap<ByAddress<&'input ast::VariableIdentifier<'input>>, Index>,
 }
@@ -57,7 +55,6 @@ impl<'input> SymbolTable<'input> {
             variable_arena: Arena::new(),
             function_scope_map: IndexMap::new(),
             expression_kind_map: IndexMap::new(),
-            external_variable_map: IndexMap::new(),
             definition_ref_map: IndexMap::new(),
             identifier_ref_map: IndexMap::new(),
         };
@@ -150,10 +147,6 @@ impl<'input> SymbolTable<'input> {
         self.identifier_ref_map
             .insert(ByAddress(identifier), *variable_id);
     }
-
-    pub fn external_variable(&self, name: &str) -> &Index {
-        self.external_variable_map.get(name).unwrap()
-    }
 }
 
 impl<'input> SymbolTable<'input> {
@@ -218,9 +211,6 @@ impl<'input> SymbolTable<'input> {
                         for parameter in parameters {
                             self.add_variable(&function_scope_id, parameter, true)?;
                         }
-                    } else {
-                        self.external_variable_map
-                            .insert(definition.name, variable_id);
                     }
                 }
 

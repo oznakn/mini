@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use generational_arena::Index;
 use indexmap::IndexMap;
@@ -11,10 +12,19 @@ use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, FunctionValue, Poi
 use inkwell::{AddressSpace, OptimizationLevel};
 
 use crate::ast;
+use crate::builtin::*;
 use crate::error::CompilerError;
 use crate::st;
 
 const MAIN_FUNCTION_NAME: &str = "main";
+
+fn new_function_label() -> String {
+    static FUNCTION_COUNTER: AtomicUsize = AtomicUsize::new(0);
+
+    let index = FUNCTION_COUNTER.fetch_add(1, Ordering::Relaxed);
+
+    format!("@f{}", index)
+}
 
 pub struct IRGenerator<'input, 'ctx> {
     pub optimize: bool,
@@ -27,6 +37,8 @@ pub struct IRGenerator<'input, 'ctx> {
 
     functions: IndexMap<Index, FunctionValue<'ctx>>,
     variables: IndexMap<Index, PointerValue<'ctx>>,
+
+    builtin_functions: IndexMap<&'static str, FunctionValue<'ctx>>,
 
     current_function_index: Option<Index>,
 }
@@ -49,6 +61,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             builder: context.create_builder(),
             functions: IndexMap::new(),
             variables: IndexMap::new(),
+            builtin_functions: IndexMap::new(),
             current_function_index: None,
         };
         ir_generator.init()?;
@@ -146,6 +159,14 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     }
 
     fn init(&mut self) -> Result<(), CompilerError<'input>> {
+        let builtin_functions = create_builtin_functions();
+
+        for (name, kind) in builtin_functions.iter() {
+            let function = self.init_function(name.to_owned(), true, kind)?;
+
+            self.builtin_functions.insert(name, function);
+        }
+
         for variable_id in self.symbol_table.variables() {
             let variable = self.symbol_table.variable(&variable_id);
 
@@ -155,33 +176,41 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
             let func_name = if self.symbol_table.main_function.unwrap() == variable_id {
                 MAIN_FUNCTION_NAME.to_owned()
-            } else {
+            } else if variable.definition.is_external {
                 variable.definition.name.to_owned()
+            } else {
+                new_function_label()
             };
 
-            self.init_function(func_name.as_str(), variable_id)?;
+            let function_variable = self.symbol_table.variable(&variable_id);
+
+            let fn_value = self.init_function(
+                func_name.as_str(),
+                function_variable.definition.is_external,
+                &function_variable.definition.kind,
+            )?;
+            self.functions.insert(variable_id, fn_value);
         }
 
         Ok(())
     }
 
     fn init_function(
-        &mut self,
+        &self,
         name: &str,
-        function_variable_id: Index,
-    ) -> Result<(), CompilerError<'input>> {
-        let function = self.symbol_table.variable(&function_variable_id);
-
-        let linkage = if function.definition.is_external {
+        is_external: bool,
+        kind: &ast::VariableKind,
+    ) -> Result<FunctionValue<'ctx>, CompilerError<'input>> {
+        let linkage = if is_external {
             Some(Linkage::ExternalWeak)
         } else {
-            None
+            Some(Linkage::External)
         };
 
         if let ast::VariableKind::Function {
             parameters,
             return_kind,
-        } = &function.definition.kind
+        } = kind
         {
             let native_return_type = self.convert_kind_to_native(return_kind.as_ref());
             let native_parameters = parameters
@@ -193,9 +222,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             let fn_type = native_return_type.fn_type(native_parameters.as_slice(), false);
             let fn_value = self.module.add_function(name, fn_type, linkage);
 
-            self.functions.insert(function_variable_id, fn_value);
-
-            Ok(())
+            Ok(fn_value)
         } else {
             unreachable!()
         }
@@ -219,13 +246,12 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         Ok(())
     }
 
-    fn call_internal(
+    fn call_builtin(
         &self,
         name: &'input str,
         args: &[BasicMetadataValueEnum<'ctx>],
     ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
-        let function_variable_id = self.symbol_table.external_variable(name);
-        let function = self.functions.get(function_variable_id).unwrap();
+        let function = self.builtin_functions.get(name).unwrap();
 
         let v = self
             .builder
@@ -592,7 +618,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                     let right = self.translate_expression(right)?.into_pointer_value();
 
                     let result = self
-                        .call_internal("str_concat", &[left.into(), right.into()])?
+                        .call_builtin("str_concat", &[left.into(), right.into()])?
                         .into_pointer_value();
 
                     self.builder.build_free(left);

@@ -96,7 +96,7 @@ FunctionReturnKind: ast::VariableKind = {
 
 FunctionDecorators: IndexSet<&'input str> = {
     <names:DecoratorName*> => {
-        IndexSet::from_iter(names.into_iter())
+        IndexSet::from_iter(names.iter().map(|s| &s[1..]))
     }
 };
 
