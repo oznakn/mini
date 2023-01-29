@@ -39,6 +39,11 @@ static void echo_float(double f64) {
 }
 
 static void echo_array(array_t *items) {
+    if (items->len == 0) {
+        printf("[]");
+        return;
+    }
+
     printf("[ ");
 
     for (uint64_t i = 0; i < items->len; i++) {
@@ -55,6 +60,11 @@ static void echo_array(array_t *items) {
 }
 
 static void echo_object(object_t *kv) {
+    if (kv->len == 0) {
+        printf("{}");
+        return;
+    }
+
     printf("{ ");
 
     for (uint64_t i = 0; i < kv->len; i++) {
@@ -79,11 +89,11 @@ static void echo_internal(val_t *v) {
     else if (v->type == VAL_NULL) {
         printf("\x1B[1m" "null" "\x1B[0m");
     }
+    else if (v->type == VAL_STR) {
+        printf("\x1B[0;32m" "'%s'" "\x1B[0m", v->str.data);
+    }
     else if (v->type == VAL_INT) {
         printf("\x1B[0;33m" "%lld" "\x1B[0m", v->i64);
-    }
-    else if (v->type == VAL_STR) {
-        printf("%s", v->str.data);
     }
     else if (v->type == VAL_FLOAT) {
         echo_float(v->f64);
@@ -109,7 +119,11 @@ void *echo(val_t *items) {
     for (uint64_t i = 0; i < items->array.len; i++) {
         val_t *v = (val_t *) items->array.data[i];
 
-        echo_internal(v);
+        if (v != NULL && v->type == VAL_STR) {
+            printf("%s", v->str.data);
+        } else {
+            echo_internal(v);
+        }
 
         if (i < items->array.len - 1) {
             printf(" ");

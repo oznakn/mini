@@ -20,6 +20,10 @@ function main() {
     // echo(x);
     // x = null;
     // echo (x);
+
+    let obj = { a: 10, b: 'merhaba' };
+    echo(obj);
+    echo({});
 }
 
 main();
