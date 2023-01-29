@@ -232,11 +232,44 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         self.builder.position_at_end(basic_block);
 
         {
+            self.define_parameters(function_variable_id)?;
+
             self.define_variables(function_variable_id)?;
 
             self.visit_statements(scope.statements)?;
 
             self.put_return(None, true)?;
+        }
+
+        Ok(())
+    }
+
+    fn define_parameters(
+        &mut self,
+        function_variable_id: &Index,
+    ) -> Result<(), CompilerError<'input>> {
+        let function = self.functions.get(function_variable_id).unwrap();
+
+        let scope = self.symbol_table.function_scope(function_variable_id);
+
+        let mut parameter_index: u32 = 0;
+
+        for variable_id in scope.variables.values() {
+            let variable = self.symbol_table.variable(variable_id);
+
+            if variable.is_parameter {
+                let v = function.get_nth_param(parameter_index).unwrap();
+
+                let alloca = self.builder.build_alloca(
+                    self.convert_kind_to_native(&variable.definition.kind),
+                    variable.definition.name,
+                );
+                self.builder.build_store(alloca, v);
+
+                self.variables.insert(*variable_id, alloca);
+
+                parameter_index += 1;
+            }
         }
 
         Ok(())
@@ -251,14 +284,16 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         for variable_id in scope.variables.values() {
             let variable = self.symbol_table.variable(variable_id);
 
-            if !variable.is_function() {
-                let alloca = self.builder.build_alloca(
-                    self.convert_kind_to_native(&variable.definition.kind),
-                    variable.definition.name,
-                );
-
-                self.variables.insert(*variable_id, alloca);
+            if variable.is_parameter || variable.is_function() {
+                continue;
             }
+
+            let alloca = self.builder.build_alloca(
+                self.convert_kind_to_native(&variable.definition.kind),
+                variable.definition.name,
+            );
+
+            self.variables.insert(*variable_id, alloca);
         }
 
         Ok(())

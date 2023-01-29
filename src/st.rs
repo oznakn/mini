@@ -17,6 +17,8 @@ pub struct Scope<'input> {
 #[derive(Clone, Debug)]
 pub struct Variable<'input> {
     pub definition: &'input ast::VariableDefinition<'input>,
+
+    pub is_parameter: bool,
 }
 
 impl<'input> Variable<'input> {
@@ -59,7 +61,7 @@ impl<'input> SymbolTable<'input> {
 
         let global_scope = symbol_table.create_scope(None, &program.statements)?;
 
-        let main_function = symbol_table.add_variable(&global_scope, main_def)?;
+        let main_function = symbol_table.add_variable(&global_scope, main_def, false)?;
         symbol_table.main_function = Some(main_function);
 
         symbol_table.set_function_scope(&main_function, &global_scope);
@@ -163,6 +165,7 @@ impl<'input> SymbolTable<'input> {
         &mut self,
         scope_id: &Index,
         definition: &'input ast::VariableDefinition<'input>,
+        is_parameter: bool,
     ) -> Result<Index, CompilerError<'input>> {
         let scope = self.scope(scope_id);
 
@@ -170,7 +173,10 @@ impl<'input> SymbolTable<'input> {
             return Err(CompilerError::VariableAlreadyDefined(definition.name));
         }
 
-        let variable_id = self.variable_arena.insert(Variable { definition });
+        let variable_id = self.variable_arena.insert(Variable {
+            definition,
+            is_parameter,
+        });
 
         self.set_definition_ref(definition, &variable_id);
 
@@ -191,19 +197,19 @@ impl<'input> SymbolTable<'input> {
                     statements,
                     ..
                 } => {
-                    let variable_id = self.add_variable(scope_id, &definition)?;
+                    let variable_id = self.add_variable(scope_id, &definition, false)?;
                     let function_scope_id = self.create_scope(Some(*scope_id), statements)?;
 
                     self.set_function_scope(&variable_id, &function_scope_id);
                     self.build_scope(&function_scope_id)?;
 
                     for parameter in parameters {
-                        self.add_variable(&function_scope_id, parameter)?;
+                        self.add_variable(&function_scope_id, parameter, true)?;
                     }
                 }
 
                 ast::Statement::DefinitionStatement { definition, .. } => {
-                    self.add_variable(scope_id, definition)?;
+                    self.add_variable(scope_id, definition, false)?;
                 }
 
                 _ => {}
