@@ -30,6 +30,7 @@ pub struct IRGenerator<'input, 'ctx> {
     pub optimize: bool,
 
     symbol_table: &'input st::SymbolTable<'input>,
+    val_type: BasicTypeEnum<'ctx>,
 
     context: &'ctx Context,
     module: Module<'ctx>,
@@ -56,6 +57,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         let mut ir_generator = IRGenerator {
             optimize,
             symbol_table,
+            val_type: builtins::get_val_type(context),
             context,
             module,
             builder: context.create_builder(),
@@ -134,16 +136,6 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         self.variables.get(variable_id).unwrap()
     }
 
-    fn convert_kind_to_native(&self, variable_kind: &ast::VariableKind) -> BasicTypeEnum<'ctx> {
-        match variable_kind {
-            ast::VariableKind::Number => self.context.i64_type().as_basic_type_enum(),
-
-            ast::VariableKind::String => builtins::get_string_type(self.context).into(),
-
-            _ => unimplemented!(),
-        }
-    }
-
     fn init(&mut self) -> Result<(), CompilerError<'input>> {
         let builtin_functions = builtins::create_builtin_functions(self.context);
 
@@ -160,15 +152,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 continue;
             }
 
-            let func_name = if self.symbol_table.main_function.unwrap() == variable_id {
-                MAIN_FUNCTION_NAME.to_owned()
-            } else if variable.definition.is_external {
-                variable.definition.name.to_owned()
-            } else {
-                new_function_label()
-            };
-
-            let fn_value = self.init_function(func_name.as_str(), variable_id)?;
+            let fn_value = self.init_function(variable_id)?;
             self.functions.insert(variable_id, fn_value);
         }
 
@@ -189,10 +173,17 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
     fn init_function(
         &self,
-        name: &str,
         function_variable_id: Index,
     ) -> Result<FunctionValue<'ctx>, CompilerError<'input>> {
         let function = self.symbol_table.variable(&function_variable_id);
+
+        let func_name = if self.symbol_table.main_function.unwrap() == function_variable_id {
+            MAIN_FUNCTION_NAME.to_owned()
+        } else if function.definition.is_external {
+            function.definition.name.to_owned()
+        } else {
+            new_function_label()
+        };
 
         let linkage = if function.definition.is_external {
             Linkage::ExternalWeak
@@ -200,20 +191,16 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             Linkage::External
         };
 
-        if let ast::VariableKind::Function {
-            parameters,
-            return_kind,
-        } = &function.definition.kind
-        {
-            let native_return_type = self.convert_kind_to_native(return_kind.as_ref());
-            let native_parameters = parameters
+        if let ast::VariableKind::Function { parameters, .. } = &function.definition.kind {
+            let parameters = vec![self.val_type.as_basic_type_enum()]
                 .iter()
-                .map(|k| self.convert_kind_to_native(k))
-                .map(|t| t.into())
+                .cycle()
+                .take(parameters.len())
+                .map(|t| (*t).into())
                 .collect::<Vec<_>>();
 
-            let fn_type = native_return_type.fn_type(native_parameters.as_slice(), false);
-            let fn_value = self.module.add_function(name, fn_type, Some(linkage));
+            let fn_type = self.val_type.fn_type(parameters.as_slice(), false);
+            let fn_value = self.module.add_function(&func_name, fn_type, Some(linkage));
 
             Ok(fn_value)
         } else {
@@ -297,10 +284,9 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             if variable.is_parameter {
                 let v = function.get_nth_param(parameter_index).unwrap();
 
-                let alloca = self.builder.build_alloca(
-                    self.convert_kind_to_native(&variable.definition.kind),
-                    variable.definition.name,
-                );
+                let alloca = self
+                    .builder
+                    .build_alloca(self.val_type, variable.definition.name);
                 self.builder.build_store(alloca, v);
 
                 self.variables.insert(*variable_id, alloca);
@@ -325,10 +311,9 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 continue;
             }
 
-            let alloca = self.builder.build_alloca(
-                self.convert_kind_to_native(&variable.definition.kind),
-                variable.definition.name,
-            );
+            let alloca = self
+                .builder
+                .build_alloca(self.val_type, variable.definition.name);
 
             self.variables.insert(*variable_id, alloca);
         }
@@ -381,101 +366,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         Ok(())
     }
 
-    fn translate_number_binary_expression(
-        &self,
-        expression: &'input ast::Expression<'input>,
-    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
-        if let ast::Expression::BinaryExpression {
-            operator,
-            left,
-            right,
-            ..
-        } = expression
-        {
-            match operator {
-                ast::BinaryOperator::Addition => {
-                    let left = self.translate_expression(left)?;
-                    let right = self.translate_expression(right)?;
-
-                    let v = self.builder.build_int_add(
-                        left.into_int_value(),
-                        right.into_int_value(),
-                        "addtmp",
-                    );
-
-                    Ok(v.into())
-                }
-
-                ast::BinaryOperator::Subtraction => {
-                    let left = self.translate_expression(left)?;
-                    let right = self.translate_expression(right)?;
-
-                    let v = self.builder.build_int_sub(
-                        left.into_int_value(),
-                        right.into_int_value(),
-                        "subtmp",
-                    );
-
-                    Ok(v.into())
-                }
-
-                ast::BinaryOperator::Multiplication => {
-                    let left = self.translate_expression(left)?;
-                    let right = self.translate_expression(right)?;
-
-                    let v = self.builder.build_int_mul(
-                        left.into_int_value(),
-                        right.into_int_value(),
-                        "multmp",
-                    );
-
-                    Ok(v.into())
-                }
-
-                _ => unimplemented!(),
-            }
-        } else {
-            unreachable!()
-        }
-    }
-
-    fn translate_number_unary_expression(
-        &self,
-        expression: &'input ast::Expression<'input>,
-    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
-        if let ast::Expression::UnaryExpression {
-            operator,
-            expression,
-            ..
-        } = expression
-        {
-            match operator {
-                ast::UnaryOperator::Positive => {
-                    let v = self.translate_expression(&expression)?;
-
-                    Ok(v.into())
-                }
-
-                ast::UnaryOperator::Negative => {
-                    let left = self.context.i64_type().const_zero();
-
-                    let right = self.translate_expression(&expression)?;
-
-                    let v = self
-                        .builder
-                        .build_int_sub(left, right.into_int_value(), "subtmp");
-
-                    Ok(v.into())
-                }
-
-                _ => unimplemented!(),
-            }
-        } else {
-            unreachable!()
-        }
-    }
-
-    fn translate_string_binary_expression(
+    fn translate_binary_expression(
         &self,
         expression: &'input ast::Expression<'input>,
     ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
@@ -492,7 +383,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                     let right = self.translate_expression(right)?.into_pointer_value();
 
                     let result = self
-                        .call_builtin("str_combine", &[left.into(), right.into()])?
+                        .call_builtin("val_op_plus", &[left.into(), right.into()])?
                         .into_pointer_value();
 
                     Ok(result.into())
@@ -511,17 +402,24 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
         match expression {
             ast::Expression::ConstantExpression { value, .. } => match value {
-                ast::Constant::Integer(data) => {
-                    let v = self.context.i64_type().const_int(*data, true);
+                ast::Constant::Null => {
+                    let v = self.val_type.const_zero();
 
                     Ok(v.into())
                 }
 
-                ast::Constant::Boolean(data) => {
-                    let data = if *data { 1 } else { 0 };
+                ast::Constant::Integer(data) => {
+                    let v = self.context.i64_type().const_int(*data, true);
 
-                    let i1_type = self.context.bool_type();
-                    let v = i1_type.const_int(data, false);
+                    let v = self.call_builtin("new_int", &[v.into()])?;
+
+                    Ok(v.into())
+                }
+
+                ast::Constant::Float(data) => {
+                    let v = self.context.f64_type().const_float(*data);
+
+                    let v = self.call_builtin("new_float", &[v.into()])?;
 
                     Ok(v.into())
                 }
@@ -571,32 +469,12 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 Ok(v)
             }
 
-            ast::Expression::BinaryExpression { left, right, .. } => {
-                let left_kind = self.symbol_table.expression_kind(left);
-                let right_kind = self.symbol_table.expression_kind(right);
-
-                let result_kind = left_kind.operation_result(right_kind);
-
-                match result_kind {
-                    ast::VariableKind::Number => {
-                        self.translate_number_binary_expression(expression)
-                    }
-
-                    ast::VariableKind::String => {
-                        self.translate_string_binary_expression(expression)
-                    }
-
-                    _ => unimplemented!(),
-                }
+            ast::Expression::BinaryExpression { .. } => {
+                self.translate_binary_expression(expression)
             }
 
-            ast::Expression::UnaryExpression { expression: e, .. } => {
-                let result_kind = self.symbol_table.expression_kind(e);
-
-                match result_kind {
-                    ast::VariableKind::Number => self.translate_number_unary_expression(expression),
-                    _ => unimplemented!(),
-                }
+            ast::Expression::UnaryExpression { .. } => {
+                unimplemented!()
             }
 
             ast::Expression::AssignmentExpression {

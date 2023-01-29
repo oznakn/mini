@@ -5,12 +5,19 @@
 
 #include "val.h"
 
-void echo_number(int n) {
-    printf("%d\n", n);
-}
+void *echo(val_t *v) {
+    if (v == NULL) {
+        printf("null\n");
+    } else if (v->type == VAL_INT) {
+        printf("%lld\n", v->i64);
+    } else if (v->type == VAL_STR) {
+        printf("%s\n", v->str.data);
+    } else {
+        printf("RUNTIME:: echo: expected int or string, got %d", v->type);
+        exit(1);
+    }
 
-void echo_string(val_t *v) {
-    printf("%s\n", v->str.data);
+    return NULL;
 }
 
 #endif

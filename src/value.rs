@@ -1,7 +1,8 @@
 #[derive(Clone, Debug, Eq, PartialEq, Hash)]
 pub enum VariableKind {
-    Void,
     Null,
+    Void,
+    Any,
     Boolean,
     String,
     Number,
@@ -16,14 +17,16 @@ pub enum Constant<'input> {
     Null,
     Boolean(bool),
     Integer(u64),
+    Float(f64),
     String(&'input str),
 }
 
 impl VariableKind {
     pub fn get_name(&self) -> &'static str {
         match self {
-            VariableKind::Void => "void",
             VariableKind::Null => "null",
+            VariableKind::Void => "void",
+            VariableKind::Any => "any",
             VariableKind::Boolean => "boolean",
             VariableKind::String => "string",
             VariableKind::Number { .. } => "number",
@@ -61,6 +64,7 @@ impl<'input> Constant<'input> {
             Constant::Null => VariableKind::Null,
             Constant::Boolean(_) => VariableKind::Boolean,
             Constant::Integer(_) => VariableKind::Number,
+            Constant::Float(_) => VariableKind::Number,
             Constant::String(_) => VariableKind::String,
         }
     }

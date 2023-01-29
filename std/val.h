@@ -13,16 +13,34 @@ typedef struct {
 
 typedef enum  {
     VAL_INT,
+    VAL_FLOAT,
     VAL_STR,
 } val_type_t;
 
 typedef struct {
     val_type_t type;
     union {
-        int64_t *i64;
+        int64_t i64;
+        double f64;
         str_t str;
     };
 } val_t;
+
+val_t *new_int(int64_t n) {
+    val_t *result = malloc(sizeof(val_t));
+    result->type = VAL_INT;
+    result->i64 = n;
+
+    return result;
+}
+
+val_t *new_float(double f) {
+    val_t *result = malloc(sizeof(val_t));
+    result->type = VAL_FLOAT;
+    result->f64 = f;
+
+    return result;
+}
 
 val_t *new_str(char *s) {
     uint64_t len = strlen(s);
@@ -34,18 +52,7 @@ val_t *new_str(char *s) {
     result->str.len = len;
     result->str.data = data;
 
-    printf("RUNTIME:: new_string: %s\n", data);
-
     return result;
-}
-
-uint32_t str_length(val_t *v) {
-    if (v->type != VAL_STR) {
-        printf("RUNTIME:: str_length: expected string, got %d", v->type);
-        exit(1);
-    }
-
-    return v->str.len;
 }
 
 val_t *str_combine(val_t *v1, val_t *v2) {
@@ -68,12 +75,25 @@ val_t *str_combine(val_t *v1, val_t *v2) {
     result->str.len = v1->str.len + v2->str.len;
     result->str.data = data;
 
-    printf("RUNTIME:: combined_string: %s\n", data);
+    return result;
+}
+
+
+val_t *val_op_plus(val_t *v1, val_t *v2) {
+    val_t *r = NULL;
+
+    if (v1->type == VAL_STR && v2->type == VAL_STR) {
+        r = str_combine(v1, v2);
+    }
+
+    if (v1->type == VAL_INT && v2->type == VAL_INT) {
+        r = new_int(v1->i64 + v2->i64);
+    }
 
     free(v1);
     free(v2);
 
-    return result;
+    return r;
 }
 
 

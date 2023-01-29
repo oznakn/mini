@@ -7,10 +7,10 @@ use inkwell::{
 };
 
 pub fn get_null_value<'ctx>(context: &'ctx Context) -> BasicValueEnum<'ctx> {
-    context.i64_type().const_zero().into()
+    get_val_type(context).const_zero().into()
 }
 
-pub fn get_string_type<'ctx>(context: &'ctx Context) -> BasicTypeEnum<'ctx> {
+pub fn get_val_type<'ctx>(context: &'ctx Context) -> BasicTypeEnum<'ctx> {
     context
         .struct_type(&[context.i8_type().into()], true)
         .ptr_type(AddressSpace::default())
@@ -22,24 +22,24 @@ pub fn create_builtin_functions<'ctx>(
 ) -> IndexMap<&'static str, FunctionType<'ctx>> {
     let mut map = IndexMap::new();
 
-    let string_type = get_string_type(context);
+    let val_type = get_val_type(context);
 
     map.insert(
         "new_str",
-        string_type.fn_type(
+        val_type.fn_type(
             &[context.i8_type().ptr_type(AddressSpace::default()).into()],
             false,
         ),
     );
 
     map.insert(
-        "str_length",
-        context.i64_type().fn_type(&[string_type.into()], false),
+        "new_int",
+        val_type.fn_type(&[context.i64_type().into()], false),
     );
 
     map.insert(
-        "str_combine",
-        string_type.fn_type(&[string_type.into(), string_type.into()], false),
+        "val_op_plus",
+        val_type.fn_type(&[val_type.into(), val_type.into()], false),
     );
 
     map

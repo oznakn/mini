@@ -1,15 +1,9 @@
 // @ts-ignore
-declare function echo_number(n: number): number;
-// @ts-ignore
-declare function echo_string(n: string): number;
-
-function x(): number {
-    return 10;
-}
+declare function echo(s: any): void;
 
 let s: string = 'selam' + '1';
-echo_string(s);
+echo(s);
 
 let n: number = 5;
-n = 10;
-echo_number(n);
+n = 10 + 50;
+echo(n);
