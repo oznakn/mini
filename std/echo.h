@@ -3,14 +3,14 @@
 
 #include <stdio.h>
 
-#include "str.h"
+#include "val.h"
 
 void echo_number(int n) {
     printf("%d\n", n);
 }
 
-void echo_string(str_t *s) {
-    printf("%s\n", s->data);
+void echo_string(val_t *v) {
+    printf("%s\n", v->str.data);
 }
 
 #endif

@@ -12,13 +12,7 @@ pub fn get_null_value<'ctx>(context: &'ctx Context) -> BasicValueEnum<'ctx> {
 
 pub fn get_string_type<'ctx>(context: &'ctx Context) -> BasicTypeEnum<'ctx> {
     context
-        .struct_type(
-            &[
-                context.i64_type().into(),
-                context.i8_type().ptr_type(AddressSpace::default()).into(),
-            ],
-            true,
-        )
+        .struct_type(&[context.i8_type().into()], true)
         .ptr_type(AddressSpace::default())
         .into()
 }
