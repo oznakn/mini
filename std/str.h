@@ -6,11 +6,11 @@ typedef struct {
     char *data;
 } str_t;
 
-void free_str(str_t *s) {
+static void free_str(str_t *s) {
     free(s->data);
 }
 
-void new_str(str_t *result, char *s) {
+static void new_str(str_t *result, char *s) {
     uint64_t len = strlen(s);
     char *data = malloc(len + 1);
     memcpy(data, s, len + 1);
@@ -19,7 +19,7 @@ void new_str(str_t *result, char *s) {
     result->data = data;
 }
 
-void str_combine(str_t *result, str_t *s1, str_t *s2) {
+static void str_combine(str_t *result, str_t *s1, str_t *s2) {
     char *data = malloc(s1->len + s2->len + 1);
     memcpy(data, s1->data, s1->len);
     memcpy(data + s1->len, s2->data, s2->len + 1);

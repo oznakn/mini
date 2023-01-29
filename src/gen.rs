@@ -291,6 +291,9 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 self.builder.build_store(alloca, v);
 
                 parameter_index += 1;
+            } else {
+                let v = builtins::get_null_value(self.context);
+                self.builder.build_store(alloca, v);
             }
         }
 

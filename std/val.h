@@ -25,9 +25,9 @@ typedef struct {
     };
 } val_t;
 
-int32_t active_val_count = 0;
+static int32_t active_val_count = 0;
 
-val_t *new_val(val_type_t type) {
+static val_t *new_val(val_type_t type) {
     val_t *result = malloc(sizeof(val_t));
     result->type = type;
     result->ref_count = 0;
@@ -35,7 +35,7 @@ val_t *new_val(val_type_t type) {
     return result;
 }
 
-void free_val_if_ok(val_t *val) {
+static void free_val_if_ok(val_t *val) {
     if (val != NULL && val->ref_count == 0) {
         printf("RUNTIME:: GC: %p, active: %d\n", val, active_val_count);
 
@@ -48,22 +48,26 @@ void free_val_if_ok(val_t *val) {
 }
 
 void link_val(val_t *val) {
-    active_val_count++;
-    val->ref_count++;
+    if (val != NULL) {
+        active_val_count++;
+        val->ref_count++;
 
-    assert(active_val_count > 0);
-    assert(val->ref_count > 0);
+        assert(active_val_count > 0);
+        assert(val->ref_count > 0);
+    }
 }
 
 void unlink_val(val_t *val) {
-    active_val_count--;
-    val->ref_count--;
+    if (val != NULL) {
+        active_val_count--;
+        val->ref_count--;
 
-    assert(active_val_count >= 0);
-    assert(val->ref_count >= 0);
+        assert(active_val_count >= 0);
+        assert(val->ref_count >= 0);
 
-    if (val->ref_count == 0) {
-        free_val_if_ok(val);
+        if (val->ref_count == 0) {
+            free_val_if_ok(val);
+        }
     }
 }
 
@@ -94,7 +98,7 @@ val_t *new_str_val(char *s) {
     return result;
 }
 
-val_t *new_str_with_combine(val_t *v1, val_t *v2) {
+static val_t *new_str_with_combine(val_t *v1, val_t *v2) {
     val_t *result = new_val(VAL_STR);
     str_combine(&result->str, &v1->str, &v2->str);
 
