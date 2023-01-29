@@ -623,6 +623,16 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 Ok(array.into())
             }
 
+            ast::Expression::TypeOfExpression { expression, .. } => {
+                let v = self.translate_expression(expression)?;
+
+                let v = self
+                    .call_builtin("val_get_type", &[v.into()])?
+                    .into_pointer_value();
+
+                Ok(v.into())
+            }
+
             ast::Expression::VariableExpression { identifier, .. } => {
                 let ptr = self.get_pointer_for_identifier(identifier);
 

@@ -333,6 +333,14 @@ impl<'input> SymbolTable<'input> {
                 Ok(kind)
             }
 
+            ast::Expression::TypeOfExpression { expression: e, .. } => {
+                self.visit_expression(scope_id, &e)?;
+
+                self.set_expression_kind(expression, ast::VariableKind::String);
+
+                Ok(ast::VariableKind::String)
+            }
+
             ast::Expression::ObjectExpression { properties, .. } => {
                 for (_, e) in properties {
                     self.visit_expression(scope_id, e)?;

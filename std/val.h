@@ -79,4 +79,28 @@ val_t *new_object_val() {
     return result;
 }
 
+val_t *val_get_type(val_t *v) {
+    val_t *result = NULL;
+
+    switch (v->type) {
+        case VAL_BOOL:
+            result = new_str_val("boolean");
+            break;
+        case VAL_INT:
+            result = new_str_val("number");
+            break;
+        case VAL_FLOAT:
+            result = new_str_val("number");
+            break;
+        case VAL_STR:
+            result = new_str_val("string");
+            break;
+        default:
+            result = new_str_val("object");
+            break;
+    }
+
+    return result;
+}
+
 #endif

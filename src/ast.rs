@@ -98,6 +98,10 @@ pub enum Expression<'input> {
         location: (usize, usize),
         properties: IndexMap<&'input str, Expression<'input>>,
     },
+    TypeOfExpression {
+        location: (usize, usize),
+        expression: Box<Expression<'input>>,
+    },
     VariableExpression {
         location: (usize, usize),
         identifier: VariableIdentifier<'input>,

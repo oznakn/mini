@@ -1,14 +1,6 @@
 function main() {
     const echo = console.log.bind(console);
 
-    function f(a: number, b?: string) {
-        echo(a, b);
-    }
-
-    // let s = 'selam' + '1';
-    // echo(s);
-    f(10, 'merhaba');
-
     echo([55, 10, 15]);
 
     // echo(10 * 10);
@@ -23,8 +15,7 @@ function main() {
 
     let obj = { a: 10, b: 'merhaba' };
     echo(obj);
-    echo({});
-    echo(false);
+    echo(typeof false);
 }
 
 main();

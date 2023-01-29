@@ -48,6 +48,8 @@ match {
     "null",
     "undefined",
 
+    "typeof",
+
     "return",
     "void",
     "declare",
@@ -205,9 +207,9 @@ Expression: ast::Expression<'input> = {
     AssignmentExpression,
     ArrayExpression,
     ObjectExpression,
+    TypeOfExpression,
     BinaryExpression,
 };
-
 
 PropertyDefinition: (&'input str, ast::Expression<'input>) = {
     <name:IdentifierName> ":" <e:Expression> => (name, e),
@@ -217,6 +219,12 @@ ObjectExpression: ast::Expression<'input> =
     <l1:@L> "{" <properties:CommaList<PropertyDefinition>> "}" <l2:@R> => ast::Expression::ObjectExpression {
         location: (l1, l2),
         properties: properties.into_iter().collect::<IndexMap<_, _>>(),
+    };
+
+TypeOfExpression: ast::Expression<'input> =
+    <l1:@L> "typeof" <e:Expression> <l2:@R> => ast::Expression::TypeOfExpression {
+        location: (l1, l2),
+        expression: Box::new(e),
     };
 
 AssignmentExpression: ast::Expression<'input> =
