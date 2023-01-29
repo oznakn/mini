@@ -1,11 +1,11 @@
-use std::path;
+use std::path::PathBuf;
 
 use generational_arena::Index;
 use indexmap::IndexMap;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
-use inkwell::targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetMachine};
+use inkwell::targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetTriple};
 use inkwell::types::{BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValueEnum, FunctionValue, PointerValue};
 use inkwell::OptimizationLevel;
@@ -36,10 +36,11 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     pub fn generate(
         symbol_table: &'input st::SymbolTable<'input>,
         context: &'ctx Context,
-        name: &str,
+        triple: &TargetTriple,
         optimize: bool,
+        tmp_file: PathBuf,
     ) -> Result<(), CompilerError<'input>> {
-        let module = context.create_module(name);
+        let module = context.create_module("program");
 
         let mut ir_generator = IRGenerator {
             optimize,
@@ -53,22 +54,25 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         };
         ir_generator.init()?;
         ir_generator.compile()?;
-        ir_generator.write_to_file()?;
+        ir_generator.write_to_file(triple, tmp_file)?;
 
         Ok(())
     }
 
-    fn write_to_file(&self) -> Result<(), CompilerError<'input>> {
+    fn write_to_file(
+        &self,
+        triple: &TargetTriple,
+        tmp_file: PathBuf,
+    ) -> Result<(), CompilerError<'input>> {
         self.module.verify().map_err(|err| {
             CompilerError::CodeGenError(format!("Could not verify module: {}", err))
         })?;
 
         Target::initialize_all(&InitializationConfig::default());
 
-        let target_triple = TargetMachine::get_default_triple();
-        let target = Target::from_triple(&target_triple).unwrap();
+        let target = Target::from_triple(&triple).unwrap();
         let target_machine = target.create_target_machine(
-            &target_triple,
+            &triple,
             "",
             "",
             OptimizationLevel::None,
@@ -78,11 +82,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
         if let Some(target_machine) = target_machine {
             target_machine
-                .write_to_file(
-                    &self.module,
-                    inkwell::targets::FileType::Object,
-                    path::Path::new("foo.o"),
-                )
+                .write_to_file(&self.module, inkwell::targets::FileType::Object, &tmp_file)
                 .map_err(|err| {
                     CompilerError::CodeGenError(format!("Could not write object file: {}", err))
                 })?;

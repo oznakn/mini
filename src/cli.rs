@@ -1,5 +1,6 @@
 use clap::{App, Arg};
 use inkwell::context::Context;
+use inkwell::targets::TargetTriple;
 use std::fs;
 
 use crate::ast;
@@ -32,12 +33,16 @@ fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
 
     let symbol_table = st::SymbolTable::from(&main_def, &program).map_err(|err| err.to_string())?;
 
+    let triple = target_lexicon::Triple::host();
+    let llvm_triple = TargetTriple::create(&triple.to_string());
+
     let ir_context = Context::create();
     gen::IRGenerator::generate(
         &symbol_table,
         &ir_context,
-        "foo",
+        &llvm_triple,
         matches.is_present("optimize"),
+        std::path::Path::new("foo.o").to_path_buf(),
     )
     .map_err(|err| CompilerError::CodeGenError(err.to_string()).to_string())?;
 
