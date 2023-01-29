@@ -411,7 +411,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 ast::Constant::Integer(data) => {
                     let v = self.context.i64_type().const_int(*data, true);
 
-                    let v = self.call_builtin("new_int", &[v.into()])?;
+                    let v = self.call_builtin("new_int_val", &[v.into()])?;
 
                     Ok(v.into())
                 }
@@ -419,7 +419,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 ast::Constant::Float(data) => {
                     let v = self.context.f64_type().const_float(*data);
 
-                    let v = self.call_builtin("new_float", &[v.into()])?;
+                    let v = self.call_builtin("new_float_val", &[v.into()])?;
 
                     Ok(v.into())
                 }
@@ -427,7 +427,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 ast::Constant::String(data) => {
                     let s = self.builder.build_global_string_ptr(data, "string");
 
-                    let v = self.call_builtin("new_str", &[s.as_pointer_value().into()])?;
+                    let v = self.call_builtin("new_str_val", &[s.as_pointer_value().into()])?;
 
                     Ok(v.into())
                 }

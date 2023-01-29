@@ -25,7 +25,7 @@ pub fn create_builtin_functions<'ctx>(
     let val_type = get_val_type(context);
 
     map.insert(
-        "new_str",
+        "new_str_val",
         val_type.fn_type(
             &[context.i8_type().ptr_type(AddressSpace::default()).into()],
             false,
@@ -33,8 +33,13 @@ pub fn create_builtin_functions<'ctx>(
     );
 
     map.insert(
-        "new_int",
+        "new_int_val",
         val_type.fn_type(&[context.i64_type().into()], false),
+    );
+
+    map.insert(
+        "new_float_val",
+        val_type.fn_type(&[context.f64_type().into()], false),
     );
 
     map.insert(
