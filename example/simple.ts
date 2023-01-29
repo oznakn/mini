@@ -4,8 +4,6 @@ function f(a: number, b?: string) {
     echo(a, b);
 }
 
-// const echo = console.log.bind(console);
-
 // let s = 'selam' + '1';
 // echo(s);
 f(10, 'merhaba');

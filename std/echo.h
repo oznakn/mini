@@ -39,7 +39,7 @@ static void echo_float(double f64) {
 }
 
 static void echo_array(array_t *items) {
-    printf("[");
+    printf("[ ");
 
     for (uint64_t i = 0; i < items->len; i++) {
         val_t *v = (val_t *) items->data[i];
@@ -51,7 +51,7 @@ static void echo_array(array_t *items) {
         }
     }
 
-    printf("]");
+    printf(" ]");
 }
 
 static void echo_internal(val_t *v) {
