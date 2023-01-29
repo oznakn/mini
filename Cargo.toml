@@ -17,6 +17,5 @@ regex = { version = "1" }
 [build-dependencies]
 lalrpop = { version = "0.19.8", features = ["lexer"] }
 
-[workspace]
-members = ["library"]
-default-members = ["library"]
+[profile.release]
+lto = true

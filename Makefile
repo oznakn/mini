@@ -1,14 +1,11 @@
 build:
-	cargo build --all
+	cargo build
 
 run: build
 	./target/debug/mini example/simple.ts
 
 test: build
+	gcc -c -o std.o std/std.c
 	./target/debug/mini --optimize example/simple.ts
-	gcc -L./target/debug -lmini_library -o foo foo.o
+	gcc -o foo std.o foo.o
 	./foo
-
-library: build
-	cbindgen --config cbindgen.toml --crate mini-library --output library/example/headers/library.h
-	gcc -L./target/debug -lmini_library -o library/example/hello_world library/example/hello_world.c && ./library/example/hello_world

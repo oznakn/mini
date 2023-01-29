@@ -1,11 +1,11 @@
-function __builtin_print_number(): void {
-
-}
+function __builtin_print_number(n: number): void {}
+function __builtin_print_newline(): void {}
 
 function echo(n: number): number {
-    __builtin_print_number('printf', 1, n);
+    __builtin_print_number(n * 2);
+    __builtin_print_newline();
 
     return n * 2;
 }
 
-return echo(1);
+echo(5);
