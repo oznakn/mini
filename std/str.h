@@ -1,7 +1,9 @@
 #ifndef MINI_STD_STRING_H
 #define MINI_STD_STRING_H
 
+#include <stdio.h>
 #include <stdint.h>
+#include <stdlib.h>
 #include <string.h>
 
 typedef struct {
