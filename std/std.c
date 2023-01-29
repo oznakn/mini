@@ -19,4 +19,5 @@
 
 #include "defs.h"
 #include "val.h"
+#include "ops.h"
 #include "echo.h"

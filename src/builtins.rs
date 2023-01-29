@@ -71,9 +71,54 @@ pub fn create_builtin_functions<'ctx>(
         val_type.fn_type(&[val_type.into(), val_type.into()], false),
     );
 
+    map.insert(
+        "val_op_mod",
+        val_type.fn_type(&[val_type.into(), val_type.into()], false),
+    );
+
     map.insert("val_op_pos", val_type.fn_type(&[val_type.into()], false));
     map.insert("val_op_neg", val_type.fn_type(&[val_type.into()], false));
     map.insert("val_op_not", val_type.fn_type(&[val_type.into()], false));
+
+    map.insert(
+        "val_op_eq",
+        val_type.fn_type(&[val_type.into(), val_type.into()], false),
+    );
+
+    map.insert(
+        "val_op_neq",
+        val_type.fn_type(&[val_type.into(), val_type.into()], false),
+    );
+
+    map.insert(
+        "val_op_seq",
+        val_type.fn_type(&[val_type.into(), val_type.into()], false),
+    );
+
+    map.insert(
+        "val_op_sneq",
+        val_type.fn_type(&[val_type.into(), val_type.into()], false),
+    );
+
+    map.insert(
+        "val_op_gt",
+        val_type.fn_type(&[val_type.into(), val_type.into()], false),
+    );
+
+    map.insert(
+        "val_op_gte",
+        val_type.fn_type(&[val_type.into(), val_type.into()], false),
+    );
+
+    map.insert(
+        "val_op_lt",
+        val_type.fn_type(&[val_type.into(), val_type.into()], false),
+    );
+
+    map.insert(
+        "val_op_lte",
+        val_type.fn_type(&[val_type.into(), val_type.into()], false),
+    );
 
     map.insert(
         "val_array_push",

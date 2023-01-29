@@ -389,8 +389,17 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 ast::BinaryOperator::Subtraction => "val_op_sub",
                 ast::BinaryOperator::Multiplication => "val_op_mul",
                 ast::BinaryOperator::Division => "val_op_div",
-
-                _ => unimplemented!(),
+                ast::BinaryOperator::Mod => "val_op_mod",
+                ast::BinaryOperator::Equal => "val_op_eq",
+                ast::BinaryOperator::StrictEqual => "val_op_seq",
+                ast::BinaryOperator::NotEqual => "val_op_neq",
+                ast::BinaryOperator::StrictNotEqual => "val_op_sneq",
+                ast::BinaryOperator::Less => "val_op_lt",
+                ast::BinaryOperator::LessEqual => "val_op_lte",
+                ast::BinaryOperator::Greater => "val_op_gt",
+                ast::BinaryOperator::GreaterEqual => "val_op_gte",
+                ast::BinaryOperator::And => "val_op_and",
+                ast::BinaryOperator::Or => "val_op_or",
             };
 
             let left = self.translate_expression(left)?.into_pointer_value();

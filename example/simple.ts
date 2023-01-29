@@ -26,3 +26,6 @@ echo(false);
 
 let obj = { a: 10, b: 'merhaba' };
 echo(obj);
+
+echo(-3);
+echo (!(4 < 5));
