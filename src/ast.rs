@@ -50,6 +50,7 @@ pub struct VariableDefinition<'input> {
     pub name: &'input str,
     pub kind: VariableKind,
     pub is_writable: bool,
+    pub is_external: bool,
 }
 
 #[derive(Clone, Debug)]

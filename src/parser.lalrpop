@@ -44,6 +44,7 @@ match {
 
     "return",
     "void",
+    "declare",
     "function",
     "export",
     "import",
@@ -92,22 +93,33 @@ FunctionReturnKind: ast::VariableKind = {
 };
 
 FunctionStatement: ast::Statement<'input> = {
-    <l1:@L> "function" <ll1:@L> <name:IdentifierName> <ll2:@R> "(" <parameters:CommaList<VariableDefinition>> ")" ":" <return_kind:FunctionReturnKind> <l2:@R> <statements:Body> => ast::Statement::FunctionStatement {
-        location: (l1, l2),
-        definition: ast::VariableDefinition {
-            location: (ll1, ll2),
-            name,
-            kind: ast::VariableKind::Function {
-                return_kind: Box::new(return_kind),
-                parameters: parameters
-                        .iter()
-                        .map(|parameter| parameter.kind.clone())
-                        .collect(),
+    <l1:@L> <is_external:"declare"?> "function" <ll1:@L> <name:IdentifierName> <ll2:@R> "(" <parameters:CommaList<VariableDefinition>> ")" ":" <return_kind:FunctionReturnKind> <l2:@R> <statements:Body?> => {
+        if is_external.is_none() && statements.is_none() {
+            panic!("Function must have a body");
+        }
+
+        if is_external.is_some() && statements.is_some() {
+            panic!("External function cannot have a body");
+        }
+
+        ast::Statement::FunctionStatement {
+            location: (l1, l2),
+            definition: ast::VariableDefinition {
+                location: (ll1, ll2),
+                name,
+                kind: ast::VariableKind::Function {
+                    return_kind: Box::new(return_kind),
+                    parameters: parameters
+                            .iter()
+                            .map(|parameter| parameter.kind.clone())
+                            .collect(),
+                },
+                is_writable: false,
+                is_external: is_external.is_some(),
             },
-            is_writable: false,
-        },
-        parameters,
-        statements,
+            parameters,
+            statements: statements.unwrap_or_default(),
+        }
     },
 };
 
@@ -238,6 +250,7 @@ VariableDefinition: ast::VariableDefinition<'input> = {
         name,
         kind,
         is_writable: true,
+        is_external: false,
     },
 }
 

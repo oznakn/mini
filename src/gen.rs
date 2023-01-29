@@ -15,7 +15,6 @@ use crate::error::CompilerError;
 use crate::st;
 
 const MAIN_FUNCTION_NAME: &str = "main";
-const BUILTIN_PREFIX: &str = "__builtin_";
 
 pub struct IRGenerator<'input, 'ctx> {
     pub optimize: bool,
@@ -142,23 +141,15 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
     fn init(&mut self) -> Result<(), CompilerError<'input>> {
         for variable_id in self.symbol_table.functions() {
-            let mut is_external = false;
-
             let variable = self.symbol_table.variable(variable_id);
 
             let func_name = if self.symbol_table.main_function.unwrap() == *variable_id {
                 MAIN_FUNCTION_NAME.to_owned()
-            } else if variable.definition.name.starts_with(BUILTIN_PREFIX) {
-                is_external = true;
-
-                let suffix = variable.definition.name[BUILTIN_PREFIX.len()..].to_owned();
-
-                suffix
             } else {
                 variable.definition.name.to_owned()
             };
 
-            self.init_function(func_name.as_str(), *variable_id, is_external)?;
+            self.init_function(func_name.as_str(), *variable_id)?;
         }
 
         Ok(())
@@ -168,15 +159,14 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         &mut self,
         name: &str,
         function_variable_id: Index,
-        is_external: bool,
     ) -> Result<(), CompilerError<'input>> {
-        let linkage = if is_external {
+        let function = self.symbol_table.variable(&function_variable_id);
+
+        let linkage = if function.definition.is_external {
             Some(Linkage::ExternalWeak)
         } else {
             None
         };
-
-        let function = self.symbol_table.variable(&function_variable_id);
 
         if let ast::VariableKind::Function {
             parameters,

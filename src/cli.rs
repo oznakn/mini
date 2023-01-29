@@ -29,6 +29,7 @@ fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
             return_kind: Box::new(ast::VariableKind::Number { is_float: false }),
         },
         is_writable: false,
+        is_external: false,
     };
 
     let symbol_table = st::SymbolTable::from(&main_def, &program).map_err(|err| err.to_string())?;
