@@ -7,12 +7,12 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::module::{Linkage, Module};
 use inkwell::targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetTriple};
-use inkwell::types::{BasicType, BasicTypeEnum};
+use inkwell::types::{BasicType, BasicTypeEnum, FunctionType};
 use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, FunctionValue, PointerValue};
 use inkwell::{AddressSpace, OptimizationLevel};
 
 use crate::ast;
-use crate::builtin::*;
+use crate::builtins;
 use crate::error::CompilerError;
 use crate::st;
 
@@ -154,17 +154,13 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         }
     }
 
-    fn get_null(&self) -> BasicValueEnum<'ctx> {
-        self.context.i64_type().const_zero().into()
-    }
-
     fn init(&mut self) -> Result<(), CompilerError<'input>> {
-        let builtin_functions = create_builtin_functions();
+        let builtin_functions = builtins::create_builtin_functions(self.context);
 
-        for (name, kind) in builtin_functions.iter() {
-            let function = self.init_function(name.to_owned(), true, kind)?;
+        for (name, fn_type) in builtin_functions.iter() {
+            let fn_value = self.init_builtin_function(name.to_owned(), *fn_type)?;
 
-            self.builtin_functions.insert(name, function);
+            self.builtin_functions.insert(name, fn_value);
         }
 
         for variable_id in self.symbol_table.variables() {
@@ -182,35 +178,42 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 new_function_label()
             };
 
-            let function_variable = self.symbol_table.variable(&variable_id);
-
-            let fn_value = self.init_function(
-                func_name.as_str(),
-                function_variable.definition.is_external,
-                &function_variable.definition.kind,
-            )?;
+            let fn_value = self.init_function(func_name.as_str(), variable_id)?;
             self.functions.insert(variable_id, fn_value);
         }
 
         Ok(())
     }
 
+    fn init_builtin_function(
+        &self,
+        name: &str,
+        fn_type: FunctionType<'ctx>,
+    ) -> Result<FunctionValue<'ctx>, CompilerError<'input>> {
+        let fn_value = self
+            .module
+            .add_function(name, fn_type, Some(Linkage::ExternalWeak));
+
+        Ok(fn_value)
+    }
+
     fn init_function(
         &self,
         name: &str,
-        is_external: bool,
-        kind: &ast::VariableKind,
+        function_variable_id: Index,
     ) -> Result<FunctionValue<'ctx>, CompilerError<'input>> {
-        let linkage = if is_external {
-            Some(Linkage::ExternalWeak)
+        let function = self.symbol_table.variable(&function_variable_id);
+
+        let linkage = if function.definition.is_external {
+            Linkage::ExternalWeak
         } else {
-            Some(Linkage::External)
+            Linkage::External
         };
 
         if let ast::VariableKind::Function {
             parameters,
             return_kind,
-        } = kind
+        } = &function.definition.kind
         {
             let native_return_type = self.convert_kind_to_native(return_kind.as_ref());
             let native_parameters = parameters
@@ -220,7 +223,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 .collect::<Vec<_>>();
 
             let fn_type = native_return_type.fn_type(native_parameters.as_slice(), false);
-            let fn_value = self.module.add_function(name, fn_type, linkage);
+            let fn_value = self.module.add_function(name, fn_type, Some(linkage));
 
             Ok(fn_value)
         } else {
@@ -376,7 +379,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 let v = if let Some(expression) = expression {
                     self.translate_expression(expression)?
                 } else {
-                    self.get_null()
+                    builtins::get_null_value(self.context)
                 };
 
                 self.builder.build_store(*ptr, v);
@@ -618,7 +621,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                     let right = self.translate_expression(right)?.into_pointer_value();
 
                     let result = self
-                        .call_builtin("str_concat", &[left.into(), right.into()])?
+                        .call_builtin("string_concat", &[left.into(), right.into()])?
                         .into_pointer_value();
 
                     self.builder.build_free(left);
@@ -784,7 +787,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         let v = if let Some(expression) = expression {
             self.translate_expression(expression)?
         } else {
-            self.get_null()
+            builtins::get_null_value(self.context)
         };
 
         self.builder.build_return(Some(&v));

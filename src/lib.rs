@@ -1,7 +1,7 @@
 use lalrpop_util::lalrpop_mod;
 
 pub mod ast;
-pub mod builtin;
+pub mod builtins;
 pub mod cli;
 pub mod error;
 pub mod gen;
