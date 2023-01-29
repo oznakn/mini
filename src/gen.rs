@@ -136,13 +136,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
     fn convert_kind_to_native(&self, variable_kind: &ast::VariableKind) -> BasicTypeEnum<'ctx> {
         match variable_kind {
-            ast::VariableKind::Number { is_float } => {
-                if *is_float {
-                    self.context.f64_type().as_basic_type_enum()
-                } else {
-                    self.context.i64_type().as_basic_type_enum()
-                }
-            }
+            ast::VariableKind::Number => self.context.i64_type().as_basic_type_enum(),
 
             ast::VariableKind::String => builtins::get_string_type(self.context).into(),
 
@@ -387,30 +381,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         Ok(())
     }
 
-    fn translate_expression_into_float(
-        &self,
-        expression: &'input ast::Expression<'input>,
-    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
-        let translated = self.translate_expression(expression)?;
-
-        match translated {
-            BasicValueEnum::FloatValue(_) => Ok(translated),
-            BasicValueEnum::IntValue(v) => {
-                let v = self.builder.build_signed_int_to_float(
-                    v,
-                    self.context.f64_type(),
-                    "int_to_float",
-                );
-
-                Ok(v.into())
-            }
-            _ => Err(CompilerError::CodeGenError(
-                "Cannot translate expression into float".to_string(),
-            )),
-        }
-    }
-
-    fn translate_int_binary_expression(
+    fn translate_number_binary_expression(
         &self,
         expression: &'input ast::Expression<'input>,
     ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
@@ -468,65 +439,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         }
     }
 
-    fn translate_float_binary_expression(
-        &self,
-        expression: &'input ast::Expression<'input>,
-    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
-        if let ast::Expression::BinaryExpression {
-            operator,
-            left,
-            right,
-            ..
-        } = expression
-        {
-            match operator {
-                ast::BinaryOperator::Addition => {
-                    let left = self.translate_expression_into_float(left)?;
-                    let right = self.translate_expression_into_float(right)?;
-
-                    let v = self.builder.build_float_add(
-                        left.into_float_value(),
-                        right.into_float_value(),
-                        "addtmp",
-                    );
-
-                    Ok(v.into())
-                }
-
-                ast::BinaryOperator::Subtraction => {
-                    let left = self.translate_expression_into_float(left)?;
-                    let right = self.translate_expression_into_float(right)?;
-
-                    let v = self.builder.build_float_sub(
-                        left.into_float_value(),
-                        right.into_float_value(),
-                        "subtmp",
-                    );
-
-                    Ok(v.into())
-                }
-
-                ast::BinaryOperator::Multiplication => {
-                    let left = self.translate_expression_into_float(left)?;
-                    let right = self.translate_expression_into_float(right)?;
-
-                    let v = self.builder.build_float_mul(
-                        left.into_float_value(),
-                        right.into_float_value(),
-                        "multmp",
-                    );
-
-                    Ok(v.into())
-                }
-
-                _ => unimplemented!(),
-            }
-        } else {
-            unreachable!()
-        }
-    }
-
-    fn translate_int_unary_expression(
+    fn translate_number_unary_expression(
         &self,
         expression: &'input ast::Expression<'input>,
     ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
@@ -551,42 +464,6 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                     let v = self
                         .builder
                         .build_int_sub(left, right.into_int_value(), "subtmp");
-
-                    Ok(v.into())
-                }
-
-                _ => unimplemented!(),
-            }
-        } else {
-            unreachable!()
-        }
-    }
-
-    fn translate_float_unary_expression(
-        &self,
-        expression: &'input ast::Expression<'input>,
-    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
-        if let ast::Expression::UnaryExpression {
-            operator,
-            expression,
-            ..
-        } = expression
-        {
-            match operator {
-                ast::UnaryOperator::Positive => {
-                    let v = self.translate_expression(&expression)?;
-
-                    Ok(v.into())
-                }
-
-                ast::UnaryOperator::Negative => {
-                    let left = self.context.f64_type().const_zero();
-
-                    let right = self.translate_expression_into_float(&expression)?;
-
-                    let v = self
-                        .builder
-                        .build_float_sub(left, right.into_float_value(), "subtmp");
 
                     Ok(v.into())
                 }
@@ -636,12 +513,6 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             ast::Expression::ConstantExpression { value, .. } => match value {
                 ast::Constant::Integer(data) => {
                     let v = self.context.i64_type().const_int(*data, true);
-
-                    Ok(v.into())
-                }
-
-                ast::Constant::Float(data) => {
-                    let v = self.context.f64_type().const_float(*data);
 
                     Ok(v.into())
                 }
@@ -707,12 +578,8 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 let result_kind = left_kind.operation_result(right_kind);
 
                 match result_kind {
-                    ast::VariableKind::Number { is_float } => {
-                        if is_float {
-                            self.translate_float_binary_expression(expression)
-                        } else {
-                            self.translate_int_binary_expression(expression)
-                        }
+                    ast::VariableKind::Number => {
+                        self.translate_number_binary_expression(expression)
                     }
 
                     ast::VariableKind::String => {
@@ -727,13 +594,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 let result_kind = self.symbol_table.expression_kind(e);
 
                 match result_kind {
-                    ast::VariableKind::Number { is_float } => {
-                        if *is_float {
-                            self.translate_float_unary_expression(expression)
-                        } else {
-                            self.translate_int_unary_expression(expression)
-                        }
-                    }
+                    ast::VariableKind::Number => self.translate_number_unary_expression(expression),
                     _ => unimplemented!(),
                 }
             }

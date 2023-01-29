@@ -27,7 +27,7 @@ fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
         name: "main",
         kind: ast::VariableKind::Function {
             parameters: Vec::new(),
-            return_kind: Box::new(ast::VariableKind::Number { is_float: false }),
+            return_kind: Box::new(ast::VariableKind::Number),
         },
         is_writable: false,
         is_external: false,

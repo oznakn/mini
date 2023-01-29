@@ -294,7 +294,7 @@ String: ast::Constant<'input> = {
 
 Number: ast::Constant<'input> = {
     <value:r"[0-9]+"> => ast::Constant::Integer(u64::from_str(<>).unwrap()),
-    <value:r"[0-9]+\.[0-9]+"> => ast::Constant::Float(f64::from_str(<>).unwrap()),
+//    <value:r"[0-9]+\.[0-9]+"> => ast::Constant::Float(f64::from_str(<>).unwrap()),
 }
 
 Constant: ast::Constant<'input> = {
@@ -308,7 +308,5 @@ Constant: ast::Constant<'input> = {
 
 VariableKind: ast::VariableKind = {
     "string" => ast::VariableKind::String,
-    "number" => ast::VariableKind::Number {
-        is_float: false,
-    },
+    "number" => ast::VariableKind::Number,
 };
