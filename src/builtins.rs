@@ -19,6 +19,7 @@ pub fn get_string_type<'ctx>(context: &'ctx Context) -> BasicTypeEnum<'ctx> {
             ],
             true,
         )
+        .ptr_type(AddressSpace::default())
         .into()
 }
 
@@ -27,10 +28,23 @@ pub fn create_builtin_functions<'ctx>(
 ) -> IndexMap<&'static str, FunctionType<'ctx>> {
     let mut map = IndexMap::new();
 
-    let string_type = context.i8_type().ptr_type(AddressSpace::default());
+    let string_type = get_string_type(context);
 
     map.insert(
-        "string_concat",
+        "new_str",
+        string_type.fn_type(
+            &[context.i8_type().ptr_type(AddressSpace::default()).into()],
+            false,
+        ),
+    );
+
+    map.insert(
+        "str_length",
+        context.i64_type().fn_type(&[string_type.into()], false),
+    );
+
+    map.insert(
+        "str_combine",
         string_type.fn_type(&[string_type.into(), string_type.into()], false),
     );
 

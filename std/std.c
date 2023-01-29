@@ -1,3 +1,3 @@
 #include "number.h"
-#include "string.h"
+#include "str.h"
 #include "echo.h"

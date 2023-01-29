@@ -9,7 +9,7 @@ use inkwell::module::{Linkage, Module};
 use inkwell::targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetTriple};
 use inkwell::types::{BasicType, BasicTypeEnum, FunctionType};
 use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, FunctionValue, PointerValue};
-use inkwell::{AddressSpace, OptimizationLevel};
+use inkwell::OptimizationLevel;
 
 use crate::ast;
 use crate::builtins;
@@ -144,11 +144,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 }
             }
 
-            ast::VariableKind::String => self
-                .context
-                .i8_type()
-                .ptr_type(AddressSpace::default())
-                .as_basic_type_enum(),
+            ast::VariableKind::String => builtins::get_string_type(self.context).into(),
 
             _ => unimplemented!(),
         }
@@ -548,8 +544,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 }
 
                 ast::UnaryOperator::Negative => {
-                    let i64_type = self.context.i64_type();
-                    let left = i64_type.const_zero();
+                    let left = self.context.i64_type().const_zero();
 
                     let right = self.translate_expression(&expression)?;
 
@@ -585,8 +580,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 }
 
                 ast::UnaryOperator::Negative => {
-                    let f64_type = self.context.f64_type();
-                    let left = f64_type.const_zero();
+                    let left = self.context.f64_type().const_zero();
 
                     let right = self.translate_expression_into_float(&expression)?;
 
@@ -621,11 +615,8 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                     let right = self.translate_expression(right)?.into_pointer_value();
 
                     let result = self
-                        .call_builtin("string_concat", &[left.into(), right.into()])?
+                        .call_builtin("str_combine", &[left.into(), right.into()])?
                         .into_pointer_value();
-
-                    self.builder.build_free(left);
-                    self.builder.build_free(right);
 
                     Ok(result.into())
                 }
@@ -644,15 +635,13 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         match expression {
             ast::Expression::ConstantExpression { value, .. } => match value {
                 ast::Constant::Integer(data) => {
-                    let i64_type = self.context.i64_type();
-                    let v = i64_type.const_int(*data, true);
+                    let v = self.context.i64_type().const_int(*data, true);
 
                     Ok(v.into())
                 }
 
                 ast::Constant::Float(data) => {
-                    let f64_type = self.context.f64_type();
-                    let v = f64_type.const_float(*data);
+                    let v = self.context.f64_type().const_float(*data);
 
                     Ok(v.into())
                 }
@@ -667,21 +656,9 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 }
 
                 ast::Constant::String(data) => {
-                    let size_with_null = self
-                        .context
-                        .i32_type()
-                        .const_int((data.len() as u64) + 1, false);
-
-                    let v = self
-                        .builder
-                        .build_array_malloc(self.context.i8_type(), size_with_null, "s")
-                        .unwrap();
-
                     let s = self.builder.build_global_string_ptr(data, "string");
 
-                    self.builder
-                        .build_memcpy(v, 1, s.as_pointer_value(), 1, size_with_null)
-                        .map_err(|err| CompilerError::CodeGenError(err.to_owned()))?;
+                    let v = self.call_builtin("new_str", &[s.as_pointer_value().into()])?;
 
                     Ok(v.into())
                 }
