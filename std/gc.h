@@ -17,6 +17,12 @@ static void free_val_if_ok(val_t *val) {
             }
 
             free_array(&val->array);
+        } else if (val->type == VAL_OBJECT) {
+            for (size_t i = 0; i < val->object.len; i++) {
+                unlink_val(val->object.vals[i]);
+            }
+
+            free_array(&val->array);
         }
 
         free(val);
