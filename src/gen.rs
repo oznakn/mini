@@ -380,20 +380,51 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             ..
         } = expression
         {
-            match operator {
-                ast::BinaryOperator::Addition => {
-                    let left = self.translate_expression(left)?.into_pointer_value();
-                    let right = self.translate_expression(right)?.into_pointer_value();
-
-                    let result = self
-                        .call_builtin("val_op_plus", &[left.into(), right.into()])?
-                        .into_pointer_value();
-
-                    Ok(result.into())
-                }
+            let builtin_func_name = match operator {
+                ast::BinaryOperator::Addition => "val_op_add",
+                ast::BinaryOperator::Subtraction => "val_op_sub",
+                ast::BinaryOperator::Multiplication => "val_op_mul",
+                ast::BinaryOperator::Division => "val_op_div",
 
                 _ => unreachable!(),
-            }
+            };
+
+            let left = self.translate_expression(left)?.into_pointer_value();
+            let right = self.translate_expression(right)?.into_pointer_value();
+
+            let result = self
+                .call_builtin(builtin_func_name, &[left.into(), right.into()])?
+                .into_pointer_value();
+
+            Ok(result.into())
+        } else {
+            unreachable!()
+        }
+    }
+
+    fn translate_unary_expression(
+        &self,
+        expression: &'input ast::Expression<'input>,
+    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
+        if let ast::Expression::UnaryExpression {
+            operator,
+            expression: e,
+            ..
+        } = expression
+        {
+            let builtin_func_name = match operator {
+                ast::UnaryOperator::Positive => "val_op_pos",
+                ast::UnaryOperator::Negative => "val_op_neg",
+                ast::UnaryOperator::Not => "val_op_not",
+            };
+
+            let v = self.translate_expression(e)?.into_pointer_value();
+
+            let result = self
+                .call_builtin(builtin_func_name, &[v.into()])?
+                .into_pointer_value();
+
+            Ok(result.into())
         } else {
             unreachable!()
         }
@@ -444,6 +475,12 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 _ => unimplemented!(),
             },
 
+            ast::Expression::BinaryExpression { .. } => {
+                self.translate_binary_expression(expression)
+            }
+
+            ast::Expression::UnaryExpression { .. } => self.translate_unary_expression(expression),
+
             ast::Expression::VariableExpression { identifier, .. } => {
                 let ptr = self.get_pointer_for_identifier(identifier);
 
@@ -476,14 +513,6 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                     .unwrap();
 
                 Ok(v)
-            }
-
-            ast::Expression::BinaryExpression { .. } => {
-                self.translate_binary_expression(expression)
-            }
-
-            ast::Expression::UnaryExpression { .. } => {
-                unimplemented!()
             }
 
             ast::Expression::AssignmentExpression {

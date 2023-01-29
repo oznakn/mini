@@ -11,6 +11,7 @@
     #define DEBUG(args...) { \
         fprintf(stderr, "RUNTIME:: "); \
         fprintf(stderr, ##args); \
+        fprintf(stderr, "\n"); \
     };
 #else
 	#define DEBUG(args...) {};

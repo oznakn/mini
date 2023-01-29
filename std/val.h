@@ -39,7 +39,7 @@ static val_t *new_val(val_type_t type) {
 
 static void free_val_if_ok(val_t *val) {
     if (val != NULL && val->type != VAL_NULL && val->ref_count == 0) {
-        DEBUG("GC: %p, active: %d\n", val, active_val_count);
+        DEBUG("GC: %p, active: %d", val, active_val_count);
 
         if (val->type == VAL_STR) {
             free_str(&val->str);
@@ -86,7 +86,7 @@ val_t *new_int_val(int64_t n) {
     val_t *result = new_val(VAL_INT);
     result->i64 = n;
 
-    DEBUG("new int: %lld, %p\n", result->i64, result);
+    DEBUG("new int: %lld, %p", result->i64, result);
 
     return result;
 }
@@ -95,7 +95,7 @@ val_t *new_float_val(double f) {
     val_t *result = new_val(VAL_FLOAT);
     result->f64 = f;
 
-    DEBUG("new float: %f, %p\n", result->f64, result);
+    DEBUG("new float: %f, %p", result->f64, result);
 
     return result;
 }
@@ -104,7 +104,7 @@ val_t *new_str_val(char *s) {
     val_t *result = new_val(VAL_STR);
     new_str(&result->str, s);
 
-    DEBUG("new str: %s, %p\n", result->str.data, result);
+    DEBUG("new str: %s, %p", result->str.data, result);
 
     return result;
 }
@@ -113,20 +113,31 @@ static val_t *new_str_with_combine(val_t *v1, val_t *v2) {
     val_t *result = new_val(VAL_STR);
     str_combine(&result->str, &v1->str, &v2->str);
 
-    DEBUG("new str with combine: %s, %p\n", result->str.data, result);
+    DEBUG("new str with combine: %s, %p", result->str.data, result);
 
     return result;
 }
 
-val_t *val_op_plus(val_t *v1, val_t *v2) {
+val_t *val_op_add(val_t *v1, val_t *v2) {
     val_t *result = NULL;
 
     if (v1->type == VAL_STR && v2->type == VAL_STR) {
         result = new_str_with_combine(v1, v2);
     }
-
-    if (v1->type == VAL_INT && v2->type == VAL_INT) {
+    else if (v1->type == VAL_FLOAT && v2->type == VAL_FLOAT) {
+        result = new_float_val(v1->f64 + v2->f64);
+    }
+    else if (v1->type == VAL_INT && v2->type == VAL_FLOAT) {
+        result = new_float_val((float) v1->i64 + v2->f64);
+    }
+    else if (v1->type == VAL_FLOAT && v2->type == VAL_INT) {
+        result = new_float_val(v1->f64 + (float) v2->i64);
+    }
+    else if (v1->type == VAL_INT && v2->type == VAL_INT) {
         result = new_int_val(v1->i64 + v2->i64);
+    }
+    else {
+        assert(false);
     }
 
     free_val_if_ok(v1);
@@ -135,5 +146,80 @@ val_t *val_op_plus(val_t *v1, val_t *v2) {
     return result;
 }
 
+
+val_t *val_op_sub(val_t *v1, val_t *v2) {
+    val_t *result = NULL;
+
+    if (v1->type == VAL_FLOAT && v2->type == VAL_FLOAT) {
+        result = new_float_val(v1->f64 - v2->f64);
+    }
+    else if (v1->type == VAL_INT && v2->type == VAL_FLOAT) {
+        result = new_float_val((float) v1->i64 - v2->f64);
+    }
+    else if (v1->type == VAL_FLOAT && v2->type == VAL_INT) {
+        result = new_float_val(v1->f64 - (float) v2->i64);
+    }
+    else if (v1->type == VAL_INT && v2->type == VAL_INT) {
+        result = new_int_val(v1->i64 - v2->i64);
+    }
+    else {
+        assert(false);
+    }
+
+    free_val_if_ok(v1);
+    free_val_if_ok(v2);
+
+    return result;
+}
+
+val_t *val_op_mul(val_t *v1, val_t *v2) {
+    val_t *result = NULL;
+
+    if (v1->type == VAL_FLOAT && v2->type == VAL_FLOAT) {
+        result = new_float_val(v1->f64 * v2->f64);
+    }
+    else if (v1->type == VAL_INT && v2->type == VAL_FLOAT) {
+        result = new_float_val((float) v1->i64 * v2->f64);
+    }
+    else if (v1->type == VAL_FLOAT && v2->type == VAL_INT) {
+        result = new_float_val(v1->f64 * (float) v2->i64);
+    }
+    else if (v1->type == VAL_INT && v2->type == VAL_INT) {
+        result = new_int_val(v1->i64 * v2->i64);
+    }
+    else {
+        assert(false);
+    }
+
+    free_val_if_ok(v1);
+    free_val_if_ok(v2);
+
+    return result;
+}
+
+val_t *val_op_div(val_t *v1, val_t *v2) {
+    val_t *result = NULL;
+
+    if (v1->type == VAL_FLOAT && v2->type == VAL_FLOAT) {
+        result = new_float_val(v1->f64 / v2->f64);
+    }
+    else if (v1->type == VAL_INT && v2->type == VAL_FLOAT) {
+        result = new_float_val((float) v1->i64 / v2->f64);
+    }
+    else if (v1->type == VAL_FLOAT && v2->type == VAL_INT) {
+        result = new_float_val(v1->f64 / (float) v2->i64);
+    }
+    else if (v1->type == VAL_INT && v2->type == VAL_INT) {
+        result = new_float_val((float) v1->i64 / (float) v2->i64);
+    }
+    else {
+        assert(false);
+    }
+
+    free_val_if_ok(v1);
+    free_val_if_ok(v2);
+
+    return result;
+}
 
 #endif

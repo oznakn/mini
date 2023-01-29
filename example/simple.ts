@@ -1,16 +1,17 @@
 // @ts-ignore
 declare function echo(s: any): void;
 
-let s: string = 'selam' + '1';
+// const echo = console.log.bind(console);
+
+let s = 'selam' + '1';
 echo(s);
 
-let n: number = 5;
-n = 10 + 50;
-n = 10 + 50;
-n = 10 + 50;
-echo(n);
+echo(10 * 10);
+echo(10 / 10.5);
+echo(10 / 10);
+echo(5);
 
-let x = null;
-x = null;
+let x;
+echo(x);
 x = null;
 echo (x);

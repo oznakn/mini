@@ -40,9 +40,28 @@ pub fn create_builtin_functions<'ctx>(
     );
 
     map.insert(
-        "val_op_plus",
+        "val_op_add",
         val_type.fn_type(&[val_type.into(), val_type.into()], false),
     );
+
+    map.insert(
+        "val_op_sub",
+        val_type.fn_type(&[val_type.into(), val_type.into()], false),
+    );
+
+    map.insert(
+        "val_op_mul",
+        val_type.fn_type(&[val_type.into(), val_type.into()], false),
+    );
+
+    map.insert(
+        "val_op_div",
+        val_type.fn_type(&[val_type.into(), val_type.into()], false),
+    );
+
+    map.insert("val_op_pos", val_type.fn_type(&[val_type.into()], false));
+    map.insert("val_op_neg", val_type.fn_type(&[val_type.into()], false));
+    map.insert("val_op_not", val_type.fn_type(&[val_type.into()], false));
 
     map.insert("link_val", val_type.fn_type(&[val_type.into()], false));
     map.insert("unlink_val", val_type.fn_type(&[val_type.into()], false));
