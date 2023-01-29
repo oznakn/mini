@@ -5,11 +5,11 @@
 #include <stdint.h>
 #include <string.h>
 
-#define DEBUG_MODE false
+#define DEBUG_MODE true
 
 #if DEBUG_MODE
     #define DEBUG(args...) { \
-        fprintf(stderr, "RUNTIME:: "); \
+        fprintf(stderr, "   > "); \
         fprintf(stderr, ##args); \
         fprintf(stderr, "\n"); \
     };
