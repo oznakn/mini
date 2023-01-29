@@ -20,6 +20,9 @@ declare function echo(...s: any[]): void;
 // x = null;
 // echo (x);
 
+echo(true);
+let x = false;
+echo(false);
 
 let obj = { a: 10, b: 'merhaba' };
 echo(obj);

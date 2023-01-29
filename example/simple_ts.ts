@@ -24,6 +24,7 @@ function main() {
     let obj = { a: 10, b: 'merhaba' };
     echo(obj);
     echo({});
+    echo(false);
 }
 
 main();

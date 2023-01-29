@@ -225,7 +225,11 @@ impl<'input> SymbolTable<'input> {
                     self.add_variable(scope_id, definition, false)?;
                 }
 
-                _ => {}
+                ast::Statement::ExpressionStatement { .. } => {}
+
+                ast::Statement::ReturnStatement { .. } => {}
+
+                ast::Statement::EmptyStatement => {}
             }
         }
 
@@ -406,7 +410,9 @@ impl<'input> SymbolTable<'input> {
                 }
             }
 
-            _ => {}
+            ast::Statement::FunctionStatement { .. } => {} // the function statements will be visited by visit_scopes
+
+            ast::Statement::EmptyStatement => {}
         }
 
         Ok(())

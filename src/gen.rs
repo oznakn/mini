@@ -365,7 +365,9 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 self.builder.build_store(*ptr, v);
             }
 
-            _ => {}
+            ast::Statement::FunctionStatement { .. } => {} // functions are handled in visit_function
+
+            ast::Statement::EmptyStatement => {}
         }
 
         Ok(())
@@ -388,7 +390,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 ast::BinaryOperator::Multiplication => "val_op_mul",
                 ast::BinaryOperator::Division => "val_op_div",
 
-                _ => unreachable!(),
+                _ => unimplemented!(),
             };
 
             let left = self.translate_expression(left)?.into_pointer_value();
@@ -549,6 +551,17 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                     Ok(v.into())
                 }
 
+                ast::Constant::Boolean(data) => {
+                    let v = self
+                        .context
+                        .bool_type()
+                        .const_int(if *data { 1 } else { 0 }, false);
+
+                    let v = self.call_builtin("new_bool_val", &[v.into()])?;
+
+                    Ok(v.into())
+                }
+
                 ast::Constant::Integer(data) => {
                     let v = self.context.i64_type().const_int(*data, true);
 
@@ -572,8 +585,6 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
                     Ok(v.into())
                 }
-
-                _ => unimplemented!(),
             },
 
             ast::Expression::BinaryExpression { .. } => {

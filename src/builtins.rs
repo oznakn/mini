@@ -22,6 +22,11 @@ pub fn create_builtin_functions<'ctx>(
     map.insert("new_null_val", val_type.fn_type(&[], false));
 
     map.insert(
+        "new_bool_val",
+        val_type.fn_type(&[context.bool_type().into()], false),
+    );
+
+    map.insert(
         "new_int_val",
         val_type.fn_type(&[context.i64_type().into()], false),
     );

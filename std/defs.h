@@ -21,6 +21,7 @@ typedef struct {
 
 typedef enum  {
     VAL_NULL,
+    VAL_BOOL,
     VAL_INT,
     VAL_FLOAT,
     VAL_STR,
@@ -32,6 +33,7 @@ typedef struct {
     val_type_t type;
     int32_t ref_count;
     union {
+        bool b;
         int64_t i64;
         double f64;
         str_t str;

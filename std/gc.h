@@ -6,7 +6,7 @@
 static int32_t active_val_count = 0;
 
 static void free_val_if_ok(val_t *val) {
-    if (val != NULL && val->type != VAL_NULL && val->ref_count == 0) {
+    if (val != NULL && val->type != VAL_NULL && val->type != VAL_BOOL && val->ref_count == 0) {
         DEBUG("GC: %p, type: %d", val, val->type);
 
         if (val->type == VAL_STR) {
@@ -24,7 +24,7 @@ static void free_val_if_ok(val_t *val) {
 }
 
 void link_val(val_t *val) {
-    if (val != NULL && val->type != VAL_NULL) {
+    if (val != NULL && val->type != VAL_NULL && val->type != VAL_BOOL) {
         active_val_count++;
         val->ref_count++;
 
@@ -36,7 +36,7 @@ void link_val(val_t *val) {
 }
 
 void unlink_val(val_t *val) {
-    if (val != NULL && val->type != VAL_NULL) {
+    if (val != NULL && val->type != VAL_NULL && val->type != VAL_BOOL) {
         active_val_count--;
         val->ref_count--;
 

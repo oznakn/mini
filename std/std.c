@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#define DEBUG_MODE false
+#define DEBUG_MODE true
 
 #if DEBUG_MODE
     #define DEBUG(args...) { \

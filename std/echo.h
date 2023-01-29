@@ -89,6 +89,9 @@ static void echo_internal(val_t *v) {
     else if (v->type == VAL_NULL) {
         printf("\x1B[1m" "null" "\x1B[0m");
     }
+    else if (v->type == VAL_BOOL) {
+        printf("\x1B[0;33m" "%s" "\x1B[0m", v->b ? "true" : "false");
+    }
     else if (v->type == VAL_STR) {
         printf("\x1B[0;32m" "'%s'" "\x1B[0m", v->str.data);
     }

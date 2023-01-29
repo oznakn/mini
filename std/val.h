@@ -14,6 +14,10 @@
 #include "object.h"
 #include "gc.h"
 
+static val_t null_val = {VAL_NULL, 0};
+static val_t true_val = {VAL_BOOL, 0, .b = true};
+static val_t false_val = {VAL_BOOL, 0, .b = false};
+
 static val_t *new_val(val_type_t type) {
     val_t *result = malloc(sizeof(val_t));
     result->type = type;
@@ -23,12 +27,11 @@ static val_t *new_val(val_type_t type) {
 }
 
 val_t *new_null_val() {
-    static val_t *null_val;
-    if (null_val == NULL) {
-        null_val = new_val(VAL_NULL);
-    }
+    return &null_val;
+}
 
-    return null_val;
+val_t *new_bool_val(bool b) {
+    return b ? &true_val : &false_val;
 }
 
 val_t *new_int_val(int64_t n) {
