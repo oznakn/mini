@@ -42,6 +42,7 @@ match {
     "true",
     "false",
     "null",
+    "undefined",
 
     "return",
     "void",
@@ -90,7 +91,7 @@ Statement: ast::Statement<'input> = {
 };
 
 FunctionReturnKind: ast::VariableKind = {
-    "void" => ast::VariableKind::Void,
+    "void" => ast::VariableKind::Undefined,
     <kind:VariableKind> => kind,
 };
 
@@ -303,6 +304,7 @@ Constant: ast::Constant<'input> = {
     "true" => ast::Constant::Boolean(true),
     "false" => ast::Constant::Boolean(false),
     "null" => ast::Constant::Null,
+    "undefined" => ast::Constant::Undefined,
 };
 
 VariableKind: ast::VariableKind = {

@@ -2,13 +2,8 @@ use indexmap::IndexMap;
 use inkwell::{
     context::Context,
     types::{BasicType, BasicTypeEnum, FunctionType},
-    values::BasicValueEnum,
     AddressSpace,
 };
-
-pub fn get_null_value<'ctx>(context: &'ctx Context) -> BasicValueEnum<'ctx> {
-    get_val_type(context).const_zero().into()
-}
 
 pub fn get_val_type<'ctx>(context: &'ctx Context) -> BasicTypeEnum<'ctx> {
     context
@@ -24,13 +19,7 @@ pub fn create_builtin_functions<'ctx>(
 
     let val_type = get_val_type(context);
 
-    map.insert(
-        "new_str_val",
-        val_type.fn_type(
-            &[context.i8_type().ptr_type(AddressSpace::default()).into()],
-            false,
-        ),
-    );
+    map.insert("new_null_val", val_type.fn_type(&[], false));
 
     map.insert(
         "new_int_val",
@@ -40,6 +29,14 @@ pub fn create_builtin_functions<'ctx>(
     map.insert(
         "new_float_val",
         val_type.fn_type(&[context.f64_type().into()], false),
+    );
+
+    map.insert(
+        "new_str_val",
+        val_type.fn_type(
+            &[context.i8_type().ptr_type(AddressSpace::default()).into()],
+            false,
+        ),
     );
 
     map.insert(

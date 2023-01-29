@@ -292,7 +292,8 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
                 parameter_index += 1;
             } else {
-                let v = builtins::get_null_value(self.context);
+                let v = self.val_type.const_zero();
+
                 self.builder.build_store(alloca, v);
             }
         }
@@ -354,7 +355,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 let v = if let Some(expression) = expression {
                     self.translate_expression(expression)?
                 } else {
-                    builtins::get_null_value(self.context)
+                    self.val_type.const_zero()
                 };
 
                 self.call_builtin("link_val", &[v.into()])?;
@@ -404,8 +405,14 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
         match expression {
             ast::Expression::ConstantExpression { value, .. } => match value {
-                ast::Constant::Null => {
+                ast::Constant::Undefined => {
                     let v = self.val_type.const_zero();
+
+                    Ok(v.into())
+                }
+
+                ast::Constant::Null => {
+                    let v = self.call_builtin("new_null_val", &[])?;
 
                     Ok(v.into())
                 }
@@ -509,7 +516,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         let v = if let Some(expression) = expression {
             self.translate_expression(expression)?
         } else {
-            builtins::get_null_value(self.context)
+            self.val_type.const_zero()
         };
 
         self.clear_variables()?;

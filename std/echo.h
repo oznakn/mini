@@ -7,6 +7,8 @@
 
 void *echo(val_t *v) {
     if (v == NULL) {
+        printf("undefined\n");
+    } else if (v->type == VAL_NULL) {
         printf("null\n");
     } else if (v->type == VAL_INT) {
         printf("%lld\n", v->i64);

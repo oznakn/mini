@@ -6,7 +6,11 @@ echo(s);
 
 let n: number = 5;
 n = 10 + 50;
+n = 10 + 50;
+n = 10 + 50;
 echo(n);
 
-let x;
+let x = null;
+x = null;
+x = null;
 echo (x);

@@ -3,6 +3,7 @@
 
 #include <assert.h>
 #include <stdio.h>
+#include <stdbool.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -10,6 +11,7 @@
 #include "str.h"
 
 typedef enum  {
+    VAL_NULL,
     VAL_INT,
     VAL_FLOAT,
     VAL_STR,
@@ -36,8 +38,8 @@ static val_t *new_val(val_type_t type) {
 }
 
 static void free_val_if_ok(val_t *val) {
-    if (val != NULL && val->ref_count == 0) {
-        printf("RUNTIME:: GC: %p, active: %d\n", val, active_val_count);
+    if (val != NULL && val->type != VAL_NULL && val->ref_count == 0) {
+        DEBUG("GC: %p, active: %d\n", val, active_val_count);
 
         if (val->type == VAL_STR) {
             free_str(&val->str);
@@ -48,7 +50,7 @@ static void free_val_if_ok(val_t *val) {
 }
 
 void link_val(val_t *val) {
-    if (val != NULL) {
+    if (val != NULL && val->type != VAL_NULL) {
         active_val_count++;
         val->ref_count++;
 
@@ -58,7 +60,7 @@ void link_val(val_t *val) {
 }
 
 void unlink_val(val_t *val) {
-    if (val != NULL) {
+    if (val != NULL && val->type != VAL_NULL) {
         active_val_count--;
         val->ref_count--;
 
@@ -71,11 +73,20 @@ void unlink_val(val_t *val) {
     }
 }
 
+val_t *new_null_val() {
+    static val_t *null_val;
+    if (null_val == NULL) {
+        null_val = new_val(VAL_NULL);
+    }
+
+    return null_val;
+}
+
 val_t *new_int_val(int64_t n) {
     val_t *result = new_val(VAL_INT);
     result->i64 = n;
 
-    printf("RUNTIME:: new int:  %lld, %p\n", result->i64, result);
+    DEBUG("new int: %lld, %p\n", result->i64, result);
 
     return result;
 }
@@ -84,7 +95,7 @@ val_t *new_float_val(double f) {
     val_t *result = new_val(VAL_FLOAT);
     result->f64 = f;
 
-    printf("RUNTIME:: new float: %f, %p\n", result->f64, result);
+    DEBUG("new float: %f, %p\n", result->f64, result);
 
     return result;
 }
@@ -93,7 +104,7 @@ val_t *new_str_val(char *s) {
     val_t *result = new_val(VAL_STR);
     new_str(&result->str, s);
 
-    printf("RUNTIME:: new str: %s, %p\n", result->str.data, result);
+    DEBUG("new str: %s, %p\n", result->str.data, result);
 
     return result;
 }
@@ -102,7 +113,7 @@ static val_t *new_str_with_combine(val_t *v1, val_t *v2) {
     val_t *result = new_val(VAL_STR);
     str_combine(&result->str, &v1->str, &v2->str);
 
-    printf("RUNTIME:: new str with combine: %s, %p\n", result->str.data, result);
+    DEBUG("new str with combine: %s, %p\n", result->str.data, result);
 
     return result;
 }
