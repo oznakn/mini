@@ -111,11 +111,10 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         Ok(())
     }
 
-    #[allow(dead_code)]
-    fn current_function(&self) -> &FunctionValue<'ctx> {
+    fn current_function(&self) -> (Index, &FunctionValue<'ctx>) {
         let function_id = self.current_function_index.unwrap();
 
-        &self.functions.get(&function_id).unwrap()
+        (function_id, &self.functions.get(&function_id).unwrap())
     }
 
     fn get_pointer_for_definition(
@@ -256,9 +255,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         self.builder.position_at_end(basic_block);
 
         {
-            self.define_parameters(function_variable_id)?;
-
-            self.define_variables(function_variable_id)?;
+            self.define_variables()?;
 
             self.visit_statements(scope.statements)?;
 
@@ -268,28 +265,30 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         Ok(())
     }
 
-    fn define_parameters(
-        &mut self,
-        function_variable_id: &Index,
-    ) -> Result<(), CompilerError<'input>> {
-        let function = self.functions.get(function_variable_id).unwrap();
+    fn define_variables(&mut self) -> Result<(), CompilerError<'input>> {
+        let (function_variable_id, _) = self.current_function();
 
-        let scope = self.symbol_table.function_scope(function_variable_id);
+        let scope = self.symbol_table.function_scope(&function_variable_id);
 
         let mut parameter_index: u32 = 0;
 
         for variable_id in scope.variables.values() {
             let variable = self.symbol_table.variable(variable_id);
 
+            if variable.is_function() {
+                continue;
+            }
+
+            let alloca = self
+                .builder
+                .build_alloca(self.val_type, variable.definition.name);
+            self.variables.insert(*variable_id, alloca);
+
             if variable.is_parameter {
+                let (_, function) = self.current_function();
+
                 let v = function.get_nth_param(parameter_index).unwrap();
-
-                let alloca = self
-                    .builder
-                    .build_alloca(self.val_type, variable.definition.name);
                 self.builder.build_store(alloca, v);
-
-                self.variables.insert(*variable_id, alloca);
 
                 parameter_index += 1;
             }
@@ -298,24 +297,22 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         Ok(())
     }
 
-    fn define_variables(
-        &mut self,
-        function_variable_id: &Index,
-    ) -> Result<(), CompilerError<'input>> {
-        let scope = self.symbol_table.function_scope(function_variable_id);
+    fn clear_variables(&mut self) -> Result<(), CompilerError<'input>> {
+        let (function_variable_id, _) = self.current_function();
+
+        let scope = self.symbol_table.function_scope(&function_variable_id);
 
         for variable_id in scope.variables.values() {
             let variable = self.symbol_table.variable(variable_id);
 
-            if variable.is_parameter || variable.is_function() {
+            if variable.is_function() {
                 continue;
             }
 
-            let alloca = self
-                .builder
-                .build_alloca(self.val_type, variable.definition.name);
+            let ptr = self.variables.get(variable_id).unwrap();
 
-            self.variables.insert(*variable_id, alloca);
+            let v = self.builder.build_load(*ptr, "tmp");
+            self.call_builtin("unlink_val", &[v.into()])?;
         }
 
         Ok(())
@@ -356,6 +353,8 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 } else {
                     builtins::get_null_value(self.context)
                 };
+
+                self.call_builtin("link_val", &[v.into()])?;
 
                 self.builder.build_store(*ptr, v);
             }
@@ -484,7 +483,11 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             } => {
                 let ptr = self.get_pointer_for_identifier(identifier);
 
+                let v = self.builder.build_load(*ptr, "tmp");
+                self.call_builtin("unlink_val", &[v.into()])?;
+
                 let v = self.translate_expression(expression)?;
+                self.call_builtin("link_val", &[v.into()])?;
 
                 self.builder.build_store(*ptr, v);
 
@@ -506,12 +509,14 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             builtins::get_null_value(self.context)
         };
 
+        self.clear_variables()?;
+
         self.builder.build_return(Some(&v));
 
         if !terminate {
             let ret_block = self
                 .context
-                .append_basic_block(*self.current_function(), "next");
+                .append_basic_block(*(self.current_function().1), "next");
             self.builder.position_at_end(ret_block);
         }
 

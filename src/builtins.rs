@@ -47,5 +47,8 @@ pub fn create_builtin_functions<'ctx>(
         val_type.fn_type(&[val_type.into(), val_type.into()], false),
     );
 
+    map.insert("link_val", val_type.fn_type(&[val_type.into()], false));
+    map.insert("unlink_val", val_type.fn_type(&[val_type.into()], false));
+
     map
 }

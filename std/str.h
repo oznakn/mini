@@ -6,6 +6,10 @@ typedef struct {
     char *data;
 } str_t;
 
+void free_str(str_t *s) {
+    free(s->data);
+}
+
 void new_str(str_t *result, char *s) {
     uint64_t len = strlen(s);
     char *data = malloc(len + 1);
@@ -22,10 +26,6 @@ void str_combine(str_t *result, str_t *s1, str_t *s2) {
 
     result->len = s1->len + s2->len;
     result->data = data;
-
-    free(s1->data);
-    free(s2->data);
 }
-
 
 #endif
