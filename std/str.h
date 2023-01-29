@@ -1,10 +1,7 @@
 #ifndef MINI_STD_STR_H
 #define MINI_STD_STR_H
 
-typedef struct {
-    uint64_t len;
-    char *data;
-} str_t;
+#include "defs.h"
 
 static void free_str(str_t *s) {
     free(s->data);

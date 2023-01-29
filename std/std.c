@@ -17,5 +17,6 @@
 	#define DEBUG(args...) {};
 #endif
 
+#include "defs.h"
 #include "val.h"
 #include "echo.h"

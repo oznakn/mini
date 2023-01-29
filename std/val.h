@@ -10,27 +10,8 @@
 
 #include "str.h"
 #include "array.h"
-
-typedef enum  {
-    VAL_NULL,
-    VAL_INT,
-    VAL_FLOAT,
-    VAL_STR,
-    VAL_ARRAY,
-} val_type_t;
-
-typedef struct {
-    val_type_t type;
-    int32_t ref_count;
-    union {
-        int64_t i64;
-        double f64;
-        str_t str;
-        array_t array;
-    };
-} val_t;
-
-static int32_t active_val_count = 0;
+#include "defs.h"
+#include "gc.h"
 
 static val_t *new_val(val_type_t type) {
     val_t *result = malloc(sizeof(val_t));
@@ -38,42 +19,6 @@ static val_t *new_val(val_type_t type) {
     result->ref_count = 0;
 
     return result;
-}
-
-static void free_val_if_ok(val_t *val) {
-    if (val != NULL && val->type != VAL_NULL && val->ref_count == 0) {
-        DEBUG("GC: %p, active: %d", val, active_val_count);
-
-        if (val->type == VAL_STR) {
-            free_str(&val->str);
-        }
-
-        free(val);
-    }
-}
-
-void link_val(val_t *val) {
-    if (val != NULL && val->type != VAL_NULL) {
-        active_val_count++;
-        val->ref_count++;
-
-        assert(active_val_count > 0);
-        assert(val->ref_count > 0);
-    }
-}
-
-void unlink_val(val_t *val) {
-    if (val != NULL && val->type != VAL_NULL) {
-        active_val_count--;
-        val->ref_count--;
-
-        assert(active_val_count >= 0);
-        assert(val->ref_count >= 0);
-
-        if (val->ref_count == 0) {
-            free_val_if_ok(val);
-        }
-    }
 }
 
 val_t *new_null_val() {
@@ -116,7 +61,7 @@ val_t *new_array_val(uint64_t len) {
     val_t *result = new_val(VAL_ARRAY);
     new_array(&result->array, len);
 
-    DEBUG("new array: %lld, %p", result->array.len, result);
+    DEBUG("new array: %zu, %p", result->array.len, result);
 
     return result;
 }
@@ -240,8 +185,6 @@ void *val_array_push(val_t *items, val_t *v) {
     }
 
     array_push(&items->array, v);
-
-    link_val(v);
 
     return NULL;
 }

@@ -290,6 +290,8 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 let v = function.get_nth_param(parameter_index).unwrap();
                 self.builder.build_store(alloca, v);
 
+                self.call_builtin("link_val", &[v.into()])?;
+
                 parameter_index += 1;
             } else {
                 let v = self.val_type.const_zero();
@@ -449,12 +451,12 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             let mut rest_values: Vec<BasicMetadataValueEnum<'ctx>> = Vec::new();
 
             let mut has_switched_to_rest = false;
-            for (index, param) in parameters.iter().enumerate() {
-                let exp = arguments.get(index);
 
-                if exp.is_none() && !param.is_optional {
-                    panic!("Missing argument for function call"); // Handle here before typecheck
-                }
+            let max_index = std::cmp::max(arguments.len(), parameters.len());
+
+            for index in 0..max_index {
+                let param = parameters.get(index);
+                let exp = arguments.get(index);
 
                 let v = if exp.is_some() {
                     self.translate_expression(arguments.get(index).unwrap())?
@@ -462,7 +464,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                     self.val_type.const_zero()
                 };
 
-                if has_switched_to_rest || param.is_rest {
+                if has_switched_to_rest || (param.is_some() && param.unwrap().is_rest) {
                     has_switched_to_rest = true;
 
                     rest_values.push(v.into())

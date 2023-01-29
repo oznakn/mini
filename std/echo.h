@@ -97,6 +97,8 @@ void *echo(val_t *items) {
 
     printf("\n");
 
+    free_val_if_ok(items);
+
     return NULL;
 }
 
