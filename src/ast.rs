@@ -1,4 +1,4 @@
-use indexmap::IndexSet;
+use indexmap::{IndexMap, IndexSet};
 
 pub use crate::value::*;
 
@@ -93,6 +93,10 @@ pub enum Expression<'input> {
     ArrayExpression {
         location: (usize, usize),
         items: Vec<Expression<'input>>,
+    },
+    ObjectExpression {
+        location: (usize, usize),
+        properties: IndexMap<&'input str, Expression<'input>>,
     },
     VariableExpression {
         location: (usize, usize),

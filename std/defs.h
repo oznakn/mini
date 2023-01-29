@@ -12,12 +12,20 @@ typedef struct {
     void **data;
 } array_t;
 
+typedef struct {
+    size_t capacity;
+    size_t len;
+    char **keys;
+    void **vals;
+} object_t;
+
 typedef enum  {
     VAL_NULL,
     VAL_INT,
     VAL_FLOAT,
     VAL_STR,
     VAL_ARRAY,
+    VAL_OBJECT,
 } val_type_t;
 
 typedef struct {
@@ -28,6 +36,7 @@ typedef struct {
         double f64;
         str_t str;
         array_t array;
+        object_t object;
     };
 } val_t;
 

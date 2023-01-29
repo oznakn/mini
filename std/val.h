@@ -8,9 +8,10 @@
 #include <stdint.h>
 #include <string.h>
 
+#include "defs.h"
 #include "str.h"
 #include "array.h"
-#include "defs.h"
+#include "object.h"
 #include "gc.h"
 
 static val_t *new_val(val_type_t type) {
@@ -62,6 +63,15 @@ val_t *new_array_val(uint64_t len) {
     new_array(&result->array, len);
 
     DEBUG("new array: %zu, %p", result->array.len, result);
+
+    return result;
+}
+
+val_t *new_object_val() {
+    val_t *result = new_val(VAL_OBJECT);
+    new_object(&result->object);
+
+    DEBUG("new object, %p", result);
 
     return result;
 }
@@ -186,7 +196,29 @@ void *val_array_push(val_t *items, val_t *v) {
 
     array_push(&items->array, v);
 
+    link_val(v);
+
     return NULL;
+}
+
+void *val_object_set(val_t *kv, char *k, val_t *v) {
+    if (kv->type != VAL_OBJECT) {
+        assert(false);
+    }
+
+    object_set(&kv->object, k, v);
+
+    link_val(v);
+
+    return NULL;
+}
+
+void *val_object_get(val_t *kv, char *k) {
+    if (kv->type != VAL_OBJECT) {
+        assert(false);
+    }
+
+    return object_get(&kv->object, k);
 }
 
 

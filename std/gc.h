@@ -12,6 +12,10 @@ static void free_val_if_ok(val_t *val) {
         if (val->type == VAL_STR) {
             free_str(&val->str);
         } else if (val->type == VAL_ARRAY) {
+            for (size_t i = 0; i < val->array.len; i++) {
+                unlink_val(val->array.data[i]);
+            }
+
             free_array(&val->array);
         }
 

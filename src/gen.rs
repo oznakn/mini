@@ -432,6 +432,32 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         }
     }
 
+    fn translate_object_expression(
+        &self,
+        expression: &'input ast::Expression<'input>,
+    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
+        if let ast::Expression::ObjectExpression { properties, .. } = expression {
+            let result = self
+                .call_builtin("new_object_val", &[])?
+                .into_pointer_value();
+
+            for (key, e) in properties.iter() {
+                let k = self.builder.build_global_string_ptr(key, "key");
+
+                let v = self.translate_expression(e)?;
+
+                self.call_builtin(
+                    "val_object_set",
+                    &[result.into(), k.as_pointer_value().into(), v.into()],
+                )?;
+            }
+
+            Ok(result.into())
+        } else {
+            unreachable!()
+        }
+    }
+
     fn translate_call_expression(
         &self,
         expression: &'input ast::Expression<'input>,
@@ -557,6 +583,10 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             ast::Expression::UnaryExpression { .. } => self.translate_unary_expression(expression),
 
             ast::Expression::CallExpression { .. } => self.translate_call_expression(expression),
+
+            ast::Expression::ObjectExpression { .. } => {
+                self.translate_object_expression(expression)
+            }
 
             ast::Expression::ArrayExpression { items, .. } => {
                 let array_size = self.context.i64_type().const_int(items.len() as u64, false);

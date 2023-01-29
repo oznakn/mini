@@ -54,6 +54,24 @@ static void echo_array(array_t *items) {
     printf(" ]");
 }
 
+static void echo_object(object_t *kv) {
+    printf("{ ");
+
+    for (uint64_t i = 0; i < kv->len; i++) {
+        char *k = kv->keys[i];
+        val_t *v = (val_t *) kv->vals[i];
+
+        printf("%s: ", k);
+        echo_internal(v);
+
+        if (i < kv->len - 1) {
+            printf(", ");
+        }
+    }
+
+    printf(" }");
+}
+
 static void echo_internal(val_t *v) {
     if (v == NULL) {
         printf("\x1B[2m" "undefined" "\x1B[0m");
@@ -72,6 +90,9 @@ static void echo_internal(val_t *v) {
     }
     else if (v->type == VAL_ARRAY) {
         echo_array(&v->array);
+    }
+    else if (v->type == VAL_OBJECT) {
+        echo_object(&v->object);
     }
     else {
         DEBUG("RUNTIME:: echo: expected, got %d\n", v->type);

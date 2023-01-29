@@ -13,6 +13,7 @@ pub enum VariableKind {
     Boolean,
     String,
     Number,
+    Object,
     Function {
         parameters: Vec<ParameterKind>,
         return_kind: Box<VariableKind>,
@@ -41,6 +42,7 @@ impl VariableKind {
             VariableKind::Boolean => "boolean",
             VariableKind::String => "string",
             VariableKind::Number { .. } => "number",
+            VariableKind::Object { .. } => "object",
             VariableKind::Function { .. } => "function",
             VariableKind::Array { .. } => "object",
         }

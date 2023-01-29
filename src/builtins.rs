@@ -44,6 +44,8 @@ pub fn create_builtin_functions<'ctx>(
         val_type.fn_type(&[context.i64_type().into()], false),
     );
 
+    map.insert("new_object_val", val_type.fn_type(&[], false));
+
     map.insert(
         "val_op_add",
         val_type.fn_type(&[val_type.into(), val_type.into()], false),
@@ -71,6 +73,29 @@ pub fn create_builtin_functions<'ctx>(
     map.insert(
         "val_array_push",
         val_type.fn_type(&[val_type.into(), val_type.into()], false),
+    );
+
+    map.insert(
+        "val_object_set",
+        val_type.fn_type(
+            &[
+                val_type.into(),
+                context.i8_type().ptr_type(AddressSpace::default()).into(),
+                val_type.into(),
+            ],
+            false,
+        ),
+    );
+
+    map.insert(
+        "val_object_get",
+        val_type.fn_type(
+            &[
+                val_type.into(),
+                context.i8_type().ptr_type(AddressSpace::default()).into(),
+            ],
+            false,
+        ),
     );
 
     map.insert("link_val", val_type.fn_type(&[val_type.into()], false));

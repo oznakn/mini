@@ -2,6 +2,7 @@ grammar;
 
 use std::str::FromStr;
 use indexmap::IndexSet;
+use indexmap::IndexMap;
 
 use crate::ast;
 
@@ -200,6 +201,24 @@ DefinitionStatement: ast::Statement<'input> = {
     },
 }
 
+Expression: ast::Expression<'input> = {
+    AssignmentExpression,
+    ArrayExpression,
+    ObjectExpression,
+    BinaryExpression,
+};
+
+
+PropertyDefinition: (&'input str, ast::Expression<'input>) = {
+    <name:IdentifierName> ":" <e:Expression> => (name, e),
+};
+
+ObjectExpression: ast::Expression<'input> =
+    <l1:@L> "{" <properties:CommaList<PropertyDefinition>> "}" <l2:@R> => ast::Expression::ObjectExpression {
+        location: (l1, l2),
+        properties: properties.into_iter().collect::<IndexMap<_, _>>(),
+    };
+
 AssignmentExpression: ast::Expression<'input> =
     <l1:@L> <identifier:VariableIdentifier> "=" <e:Expression> <l2:@R> => ast::Expression::AssignmentExpression {
         location: (l1, l2),
@@ -212,12 +231,6 @@ ArrayExpression: ast::Expression<'input> =
         location: (l1, l2),
         items,
     };
-
-Expression: ast::Expression<'input> = {
-    AssignmentExpression,
-    ArrayExpression,
-    BinaryExpression,
-};
 
 Term<S, O, E>: ast::Expression<'input> = {
     <l1:@L> <left:S> <operator:O> <right:E> <l2:@R> => ast::Expression::BinaryExpression {
