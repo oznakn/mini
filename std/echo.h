@@ -32,9 +32,9 @@ static void echo_float(double f64) {
     }
 
     if (index == MAX_FLOAT_PRECISION) {
-        printf("\x1B[0;33m" "%s" "\x1B[0m\n", buf);
+        printf("\x1B[0;33m" "%s" "\x1B[0m", buf);
     } else {
-        printf("\x1B[0;33m" "%s.%s" "\x1B[0m\n", buf, &buf[len - MAX_FLOAT_PRECISION]);
+        printf("\x1B[0;33m" "%s.%s" "\x1B[0m", buf, &buf[len - MAX_FLOAT_PRECISION]);
     }
 }
 
