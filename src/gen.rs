@@ -214,7 +214,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         {
             self.define_variables()?;
 
-            self.visit_statements(scope.statements)?;
+            self.visit_statements(scope.statements.unwrap())?;
 
             self.put_return(None, true)?;
         }

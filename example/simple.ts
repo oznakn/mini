@@ -9,6 +9,7 @@ echo(true);
 let x = false;
 echo(x, false, true);
 
+// let obj = { a: 10, b: 'merhaba', c() { console.log(this.a) } };
 let obj = { a: 10, b: 'merhaba' };
 echo(obj);
 // echo(obj.a);

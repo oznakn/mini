@@ -9,7 +9,7 @@ use crate::error::CompilerError;
 pub struct Scope<'input> {
     parent: Option<Index>,
 
-    pub statements: &'input Vec<ast::Statement<'input>>,
+    pub statements: Option<&'input Vec<ast::Statement<'input>>>,
 
     pub variables: IndexMap<&'input str, Index>,
 }
@@ -67,13 +67,12 @@ impl<'input> SymbolTable<'input> {
             identifier_variable_ref_map: IndexMap::new(),
         };
 
-        let global_scope = symbol_table.create_scope(None, &program.statements)?;
+        let global_scope = symbol_table.create_scope(None, None)?;
 
-        let main_function_variable = symbol_table.add_variable(&global_scope, main_def, false)?;
+        let (main_function_variable, _) = symbol_table.add_variable(&global_scope, main_def, Some(&program.statements), false)?;
         symbol_table.main_function = Some(main_function_variable);
 
-        symbol_table.set_variable_scope(&main_function_variable, &global_scope);
-        symbol_table.build_scope(&global_scope)?;
+        symbol_table.build_function_scope(&global_scope)?;
 
         symbol_table.visit_scopes()?;
 
@@ -139,7 +138,7 @@ impl<'input> SymbolTable<'input> {
     fn create_scope(
         &mut self,
         parent_scope: Option<Index>,
-        statements: &'input Vec<ast::Statement<'input>>,
+        statements: Option<&'input Vec<ast::Statement<'input>>>,
     ) -> Result<Index, CompilerError<'input>> {
         let scope_id = self.scope_arena.insert(Scope {
             parent: parent_scope,
@@ -154,8 +153,9 @@ impl<'input> SymbolTable<'input> {
         &mut self,
         scope_id: &Index,
         definition: &'input ast::VariableDefinition<'input>,
+        statements: Option<&'input Vec<ast::Statement<'input>>>,
         is_parameter: bool,
-    ) -> Result<Index, CompilerError<'input>> {
+    ) -> Result<(Index, Index), CompilerError<'input>> {
         let scope = self.scope(scope_id);
 
         if scope.variables.contains_key(definition.name) {
@@ -163,49 +163,57 @@ impl<'input> SymbolTable<'input> {
         }
 
         let variable_id = self.variable_arena.insert(Variable { definition, is_parameter });
-
         self.set_definition_ref(definition, &variable_id);
 
         let scope = self.scope_mut(scope_id);
         scope.variables.insert(definition.name, variable_id);
 
-        Ok(variable_id)
+        let variable_scope_id = self.create_scope(Some(*scope_id), statements)?;
+        self.set_variable_scope(&variable_id, &variable_scope_id);
+        if statements.is_some() {
+            self.build_function_scope(&variable_scope_id)?;
+        }
+
+        Ok((variable_id, variable_scope_id))
     }
 
-    fn build_scope(&mut self, scope_id: &Index) -> Result<(), CompilerError<'input>> {
-        let scope = self.scope(scope_id);
+    fn build_statement(&mut self, scope_id: &Index, statement: &'input ast::Statement<'input>) -> Result<(), CompilerError<'input>> {
+        match statement {
+            ast::Statement::FunctionStatement {
+                definition,
+                parameters,
+                statements,
+                ..
+            } => {
+                let (_, function_scope_id) = self.add_variable(scope_id, &definition, Some(statements), false)?;
 
-        for statement in scope.statements {
-            match statement {
-                ast::Statement::FunctionStatement {
-                    definition,
-                    parameters,
-                    statements,
-                    ..
-                } => {
-                    let variable_id = self.add_variable(scope_id, &definition, false)?;
-
-                    if !definition.is_external {
-                        let function_scope_id = self.create_scope(Some(*scope_id), statements)?;
-
-                        self.set_variable_scope(&variable_id, &function_scope_id);
-                        self.build_scope(&function_scope_id)?;
-
-                        for parameter in parameters {
-                            self.add_variable(&function_scope_id, parameter, true)?;
-                        }
+                if !definition.is_external {
+                    for parameter in parameters {
+                        self.add_variable(&function_scope_id, parameter, None, true)?;
                     }
                 }
+            }
 
-                ast::Statement::DefinitionStatement { definition, .. } => {
-                    self.add_variable(scope_id, definition, false)?;
-                }
+            ast::Statement::DefinitionStatement { definition, .. } => {
+                self.add_variable(scope_id, definition, None, false)?;
+            }
 
-                ast::Statement::ExpressionStatement { .. } => {}
+            ast::Statement::ExpressionStatement { .. } => {}
 
-                ast::Statement::ReturnStatement { .. } => {}
+            ast::Statement::ReturnStatement { .. } => {}
 
-                ast::Statement::EmptyStatement => {}
+            ast::Statement::EmptyStatement => {}
+        }
+
+        Ok(())
+    }
+
+    fn build_function_scope(&mut self, scope_id: &Index) -> Result<(), CompilerError<'input>> {
+        let scope = self.scope(scope_id);
+
+        if let Some(statements) = scope.statements {
+            for statement in statements {
+                self.build_statement(scope_id, statement)?;
             }
         }
 
@@ -389,8 +397,10 @@ impl<'input> SymbolTable<'input> {
     fn visit_scope(&mut self, scope_id: &Index) -> Result<(), CompilerError<'input>> {
         let scope = self.scope_mut(scope_id);
 
-        for statement in scope.statements {
-            self.visit_statement(scope_id, statement)?;
+        if let Some(statements) = scope.statements {
+            for statement in statements {
+                self.visit_statement(scope_id, statement)?;
+            }
         }
 
         Ok(())
