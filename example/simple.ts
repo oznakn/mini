@@ -11,7 +11,7 @@ echo(x, false, true);
 
 let obj = { a: 10, b: 'merhaba' };
 echo(obj);
-echo(obj.a);
+// echo(obj.a);
 echo(typeof -3);
 echo(!(4 < 5));
 test();

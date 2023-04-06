@@ -44,11 +44,12 @@ pub struct SymbolTable<'input> {
     scope_arena: Arena<Scope<'input>>,
     variable_arena: Arena<Variable<'input>>,
 
-    function_scope_map: IndexMap<Index, Index>,
+    variable_scope_map: IndexMap<Index, Index>,
+
     expression_kind_map: IndexMap<ByAddress<&'input ast::Expression<'input>>, ast::VariableKind>,
 
-    definition_ref_map: IndexMap<ByAddress<&'input ast::VariableDefinition<'input>>, Index>,
-    identifier_ref_map: IndexMap<ByAddress<&'input ast::VariableIdentifier<'input>>, Index>,
+    definition_variable_ref_map: IndexMap<ByAddress<&'input ast::VariableDefinition<'input>>, Index>,
+    identifier_variable_ref_map: IndexMap<ByAddress<&'input ast::VariableIdentifier<'input>>, Index>,
 }
 
 impl<'input> SymbolTable<'input> {
@@ -60,18 +61,18 @@ impl<'input> SymbolTable<'input> {
             main_function: None,
             scope_arena: Arena::new(),
             variable_arena: Arena::new(),
-            function_scope_map: IndexMap::new(),
+            variable_scope_map: IndexMap::new(),
             expression_kind_map: IndexMap::new(),
-            definition_ref_map: IndexMap::new(),
-            identifier_ref_map: IndexMap::new(),
+            definition_variable_ref_map: IndexMap::new(),
+            identifier_variable_ref_map: IndexMap::new(),
         };
 
         let global_scope = symbol_table.create_scope(None, &program.statements)?;
 
-        let main_function = symbol_table.add_variable(&global_scope, main_def, false)?;
-        symbol_table.main_function = Some(main_function);
+        let main_function_variable = symbol_table.add_variable(&global_scope, main_def, false)?;
+        symbol_table.main_function = Some(main_function_variable);
 
-        symbol_table.set_function_scope(&main_function, &global_scope);
+        symbol_table.set_variable_scope(&main_function_variable, &global_scope);
         symbol_table.build_scope(&global_scope)?;
 
         symbol_table.visit_scopes()?;
@@ -80,10 +81,7 @@ impl<'input> SymbolTable<'input> {
     }
 
     pub fn variables(&self) -> Vec<Index> {
-        self.variable_arena
-            .iter()
-            .map(|(idx, _)| idx)
-            .collect::<Vec<_>>()
+        self.variable_arena.iter().map(|(idx, _)| idx).collect::<Vec<_>>()
     }
 
     pub fn scope(&self, scope_id: &Index) -> &Scope<'input> {
@@ -102,57 +100,38 @@ impl<'input> SymbolTable<'input> {
         self.variable_arena.get_mut(*variable_id).unwrap()
     }
 
-    pub fn function_scope(&self, function_id: &Index) -> &Scope<'input> {
-        let scope_id = self.function_scope_map.get(function_id).unwrap();
+    pub fn variable_scope(&self, variable_id: &Index) -> &Scope<'input> {
+        let scope_id = self.variable_scope_map.get(variable_id).unwrap();
 
         self.scope(scope_id)
     }
 
-    fn set_function_scope(&mut self, function_id: &Index, scope_id: &Index) {
-        self.function_scope_map.insert(*function_id, *scope_id);
+    fn set_variable_scope(&mut self, variable_id: &Index, scope_id: &Index) {
+        self.variable_scope_map.insert(*variable_id, *scope_id);
     }
 
-    pub fn expression_kind(
-        &self,
-        expression: &'input ast::Expression<'input>,
-    ) -> &ast::VariableKind {
-        self.expression_kind_map
-            .get(&ByAddress(expression))
-            .unwrap()
+    pub fn expression_kind(&self, expression: &'input ast::Expression<'input>) -> &ast::VariableKind {
+        self.expression_kind_map.get(&ByAddress(expression)).unwrap()
     }
 
-    fn set_expression_kind(
-        &mut self,
-        expression: &'input ast::Expression<'input>,
-        kind: ast::VariableKind,
-    ) {
+    fn set_expression_kind(&mut self, expression: &'input ast::Expression<'input>, kind: ast::VariableKind) {
         self.expression_kind_map.insert(ByAddress(expression), kind);
     }
 
     pub fn definition_ref(&self, definition: &'input ast::VariableDefinition<'input>) -> &Index {
-        self.definition_ref_map.get(&ByAddress(definition)).unwrap()
+        self.definition_variable_ref_map.get(&ByAddress(definition)).unwrap()
     }
 
-    fn set_definition_ref(
-        &mut self,
-        definition: &'input ast::VariableDefinition<'input>,
-        variable_id: &Index,
-    ) {
-        self.definition_ref_map
-            .insert(ByAddress(definition), *variable_id);
+    fn set_definition_ref(&mut self, definition: &'input ast::VariableDefinition<'input>, variable_id: &Index) {
+        self.definition_variable_ref_map.insert(ByAddress(definition), *variable_id);
     }
 
     pub fn identifier_ref(&self, identifier: &'input ast::VariableIdentifier<'input>) -> &Index {
-        self.identifier_ref_map.get(&ByAddress(identifier)).unwrap()
+        self.identifier_variable_ref_map.get(&ByAddress(identifier)).unwrap()
     }
 
-    fn set_identifier_ref(
-        &mut self,
-        identifier: &'input ast::VariableIdentifier<'input>,
-        variable_id: &Index,
-    ) {
-        self.identifier_ref_map
-            .insert(ByAddress(identifier), *variable_id);
+    fn set_identifier_ref(&mut self, identifier: &'input ast::VariableIdentifier<'input>, variable_id: &Index) {
+        self.identifier_variable_ref_map.insert(ByAddress(identifier), *variable_id);
     }
 }
 
@@ -183,10 +162,7 @@ impl<'input> SymbolTable<'input> {
             return Err(CompilerError::VariableAlreadyDefined(definition.name));
         }
 
-        let variable_id = self.variable_arena.insert(Variable {
-            definition,
-            is_parameter,
-        });
+        let variable_id = self.variable_arena.insert(Variable { definition, is_parameter });
 
         self.set_definition_ref(definition, &variable_id);
 
@@ -212,7 +188,7 @@ impl<'input> SymbolTable<'input> {
                     if !definition.is_external {
                         let function_scope_id = self.create_scope(Some(*scope_id), statements)?;
 
-                        self.set_function_scope(&variable_id, &function_scope_id);
+                        self.set_variable_scope(&variable_id, &function_scope_id);
                         self.build_scope(&function_scope_id)?;
 
                         for parameter in parameters {
@@ -238,11 +214,7 @@ impl<'input> SymbolTable<'input> {
 }
 
 impl<'input> SymbolTable<'input> {
-    pub fn fetch_variable_by_name(
-        &self,
-        scope_id: &Index,
-        name: &'input str,
-    ) -> Result<Index, CompilerError<'input>> {
+    pub fn fetch_variable_by_name(&self, scope_id: &Index, name: &'input str) -> Result<Index, CompilerError<'input>> {
         let scope = self.scope(scope_id);
 
         if let Some(variable_id) = scope.variables.get(name) {
@@ -262,9 +234,7 @@ impl<'input> SymbolTable<'input> {
         identifier: &'input ast::VariableIdentifier<'input>,
     ) -> Result<Index, CompilerError<'input>> {
         match identifier {
-            ast::VariableIdentifier::Name { name, .. } => {
-                self.fetch_variable_by_name(scope_id, name)
-            }
+            ast::VariableIdentifier::Name { name, .. } => self.fetch_variable_by_name(scope_id, name),
             _ => unimplemented!(),
         }
     }
@@ -300,9 +270,7 @@ impl<'input> SymbolTable<'input> {
             }
 
             ast::Expression::AssignmentExpression {
-                expression: e,
-                identifier,
-                ..
+                expression: e, identifier, ..
             } => {
                 let variable_id = self.fetch_variable_by_identifier(scope_id, identifier)?;
 
@@ -367,11 +335,7 @@ impl<'input> SymbolTable<'input> {
                 Ok(kind)
             }
 
-            ast::Expression::CallExpression {
-                identifier,
-                arguments,
-                ..
-            } => {
+            ast::Expression::CallExpression { identifier, arguments, .. } => {
                 for argument in arguments {
                     self.visit_expression(scope_id, argument)?;
                 }
@@ -396,11 +360,7 @@ impl<'input> SymbolTable<'input> {
         }
     }
 
-    fn visit_statement(
-        &mut self,
-        scope_id: &Index,
-        statement: &'input ast::Statement<'input>,
-    ) -> Result<(), CompilerError<'input>> {
+    fn visit_statement(&mut self, scope_id: &Index, statement: &'input ast::Statement<'input>) -> Result<(), CompilerError<'input>> {
         match statement {
             ast::Statement::ExpressionStatement { expression } => {
                 self.visit_expression(scope_id, expression)?;

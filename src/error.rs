@@ -43,28 +43,13 @@ impl<'input> fmt::Display for CompilerError<'input> {
             CompilerError::CliError(err) => write!(f, "{} {}", "error:".red(), err),
             CompilerError::CodeGenError(err) => write!(f, "{} {}", "error:".red(), err),
             CompilerError::VariableAlreadyDefined(v) => {
-                write!(
-                    f,
-                    "{} variable `{}` already defined",
-                    "error:".red(),
-                    v.yellow()
-                )
+                write!(f, "{} variable `{}` already defined", "error:".red(), v.yellow())
             }
             CompilerError::VariableNotDefined(v) => {
-                write!(
-                    f,
-                    "{} variable `{}` not defined",
-                    "error:".red(),
-                    v.yellow()
-                )
+                write!(f, "{} variable `{}` not defined", "error:".red(), v.yellow())
             }
             CompilerError::InvalidFunctionCall(v) => {
-                write!(
-                    f,
-                    "{} function call on variable `{}` invalid",
-                    "error:".red(),
-                    v.yellow(),
-                )
+                write!(f, "{} function call on variable `{}` invalid", "error:".red(), v.yellow(),)
             }
             CompilerError::InvalidNumberOfArguments(v, expected, got) => {
                 write!(
@@ -97,20 +82,10 @@ impl<'input> fmt::Display for CompilerError<'input> {
                 )
             }
             CompilerError::CannotAssignConstVariable(v) => {
-                write!(
-                    f,
-                    "{} cannot assign to const variable `{}`",
-                    "error:".red(),
-                    v.yellow()
-                )
+                write!(f, "{} cannot assign to const variable `{}`", "error:".red(), v.yellow())
             }
             CompilerError::CannotReturnFromGlobalScope => {
-                write!(
-                    f,
-                    "{} cannot use `{}` in global scope",
-                    "error:".red(),
-                    "return".yellow()
-                )
+                write!(f, "{} cannot use `{}` in global scope", "error:".red(), "return".yellow())
             }
         }
     }
