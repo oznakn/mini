@@ -1,7 +1,6 @@
 grammar;
 
 use std::str::FromStr;
-use indexmap::IndexSet;
 use indexmap::IndexMap;
 
 use crate::ast;
@@ -101,12 +100,6 @@ FunctionReturnKind: ast::VariableKind = {
     VariableKind,
 };
 
-FunctionDecorators: IndexSet<&'input str> = {
-    <names:DecoratorName*> => {
-        IndexSet::from_iter(names.iter().map(|s| &s[1..]))
-    }
-};
-
 FunctionParameter: (ast::VariableDefinition<'input>, ast::ParameterKind) = {
     <l1:@L> <rest:"..."?> <name:IdentifierName> <optional:"?"?> <kind:(":" <VariableKind>)?> <l2:@R> => {
         let kind = kind.unwrap_or(ast::VariableKind::Any);
@@ -117,7 +110,6 @@ FunctionParameter: (ast::VariableDefinition<'input>, ast::ParameterKind) = {
             kind: kind.clone(),
             is_writable: true,
             is_external: false,
-            decorators: IndexSet::new(),
         };
 
         let param_kind = ast::ParameterKind {
@@ -131,7 +123,7 @@ FunctionParameter: (ast::VariableDefinition<'input>, ast::ParameterKind) = {
 }
 
 FunctionStatement: ast::Statement<'input> = {
-    <l1:@L> <decorators:FunctionDecorators> "declare" "function" <ll1:@L> <name:IdentifierName> <ll2:@R> "(" <parameters:CommaList<FunctionParameter>> ")" <return_kind:(":" <FunctionReturnKind>)?> ";" <l2:@R> => ast::Statement::FunctionStatement {
+    <l1:@L> "declare" "function" <ll1:@L> <name:IdentifierName> <ll2:@R> "(" <parameters:CommaList<FunctionParameter>> ")" <return_kind:(":" <FunctionReturnKind>)?> ";" <l2:@R> => ast::Statement::FunctionStatement {
         location: (l1, l2),
         definition: ast::VariableDefinition {
             location: (ll1, ll2),
@@ -145,7 +137,6 @@ FunctionStatement: ast::Statement<'input> = {
             },
             is_writable: false,
             is_external: true,
-            decorators,
         },
         parameters: parameters
             .iter()
@@ -154,7 +145,7 @@ FunctionStatement: ast::Statement<'input> = {
         statements: Vec::new(),
     },
 
-    <l1:@L> <decorators:FunctionDecorators> "function" <ll1:@L> <name:IdentifierName> <ll2:@R> "(" <parameters:CommaList<FunctionParameter>> ")" <return_kind:(":" <FunctionReturnKind>)?> <l2:@R> <statements:Body> => ast::Statement::FunctionStatement {
+    <l1:@L> "function" <ll1:@L> <name:IdentifierName> <ll2:@R> "(" <parameters:CommaList<FunctionParameter>> ")" <return_kind:(":" <FunctionReturnKind>)?> <l2:@R> <statements:Body> => ast::Statement::FunctionStatement {
         location: (l1, l2),
         definition: ast::VariableDefinition {
             location: (ll1, ll2),
@@ -168,7 +159,6 @@ FunctionStatement: ast::Statement<'input> = {
             },
             is_writable: false,
             is_external: false,
-            decorators,
         },
         parameters: parameters
             .iter()
@@ -331,7 +321,6 @@ VariableDefinition: ast::VariableDefinition<'input> = {
         kind: kind.unwrap_or(ast::VariableKind::Any),
         is_writable: true,
         is_external: false,
-        decorators: IndexSet::new(),
     },
 }
 

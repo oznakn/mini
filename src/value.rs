@@ -48,23 +48,16 @@ impl VariableKind {
         }
     }
 
-    fn is_number(&self) -> bool {
-        match self {
-            VariableKind::Number => true,
-            _ => false,
-        }
-    }
-
     pub fn operation_result(&self, other: &VariableKind) -> VariableKind {
         if other == self {
             return self.clone();
         }
 
-        if *other == VariableKind::String || *self == VariableKind::String {
+        if *self == VariableKind::String || *other == VariableKind::String {
             return VariableKind::String;
         }
 
-        if self.is_number() && other.is_number() {
+        if *self == VariableKind::Number && *other == VariableKind::Number {
             return VariableKind::Number;
         }
 

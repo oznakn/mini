@@ -1,4 +1,4 @@
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
 
 pub use crate::value::*;
 
@@ -53,7 +53,6 @@ pub struct VariableDefinition<'input> {
     pub kind: VariableKind,
     pub is_writable: bool,
     pub is_external: bool,
-    pub decorators: IndexSet<&'input str>,
 }
 
 #[derive(Clone, Debug)]
