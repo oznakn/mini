@@ -55,6 +55,15 @@ pub struct VariableDefinition<'input> {
     pub is_external: bool,
 }
 
+impl<'input> VariableDefinition<'input> {
+    pub fn is_function_definition(&self) -> bool {
+        match self.kind {
+            VariableKind::Function { .. } => true,
+            _ => false,
+        }
+    }
+}
+
 #[derive(Clone, Debug)]
 pub struct Program<'input> {
     pub statements: Vec<Statement<'input>>,

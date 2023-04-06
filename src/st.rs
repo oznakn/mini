@@ -5,13 +5,20 @@ use indexmap::IndexMap;
 use crate::ast;
 use crate::error::CompilerError;
 
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+pub enum ScopeKind {
+    Function,
+    Object,
+}
+
 #[derive(Clone, Debug)]
 pub struct Scope<'input> {
     parent: Option<Index>,
-
-    pub statements: Option<&'input Vec<ast::Statement<'input>>>,
+    pub kind: ScopeKind,
 
     pub variables: IndexMap<&'input str, Index>,
+
+    pub statements: Option<&'input Vec<ast::Statement<'input>>>,
 }
 
 #[derive(Clone, Debug)]
@@ -67,12 +74,12 @@ impl<'input> SymbolTable<'input> {
             identifier_variable_ref_map: IndexMap::new(),
         };
 
-        let global_scope = symbol_table.create_scope(None, None)?;
+        let global_scope = symbol_table.create_scope(ScopeKind::Object, None)?;
 
-        let (main_function_variable, _) = symbol_table.add_variable(&global_scope, main_def, Some(&program.statements), false)?;
+        let (main_function_variable, main_function_scope_id) = symbol_table.add_variable(&global_scope, main_def, false)?;
         symbol_table.main_function = Some(main_function_variable);
 
-        symbol_table.build_function_scope(&global_scope)?;
+        symbol_table.add_statements_to_scope(&main_function_scope_id, &program.statements)?;
 
         symbol_table.visit_scopes()?;
 
@@ -135,15 +142,12 @@ impl<'input> SymbolTable<'input> {
 }
 
 impl<'input> SymbolTable<'input> {
-    fn create_scope(
-        &mut self,
-        parent_scope: Option<Index>,
-        statements: Option<&'input Vec<ast::Statement<'input>>>,
-    ) -> Result<Index, CompilerError<'input>> {
+    fn create_scope(&mut self, kind: ScopeKind, parent_scope: Option<Index>) -> Result<Index, CompilerError<'input>> {
         let scope_id = self.scope_arena.insert(Scope {
             parent: parent_scope,
-            statements,
+            kind,
             variables: IndexMap::new(),
+            statements: None,
         });
 
         Ok(scope_id)
@@ -153,28 +157,51 @@ impl<'input> SymbolTable<'input> {
         &mut self,
         scope_id: &Index,
         definition: &'input ast::VariableDefinition<'input>,
-        statements: Option<&'input Vec<ast::Statement<'input>>>,
         is_parameter: bool,
     ) -> Result<(Index, Index), CompilerError<'input>> {
         let scope = self.scope(scope_id);
-
         if scope.variables.contains_key(definition.name) {
             return Err(CompilerError::VariableAlreadyDefined(definition.name));
         }
 
+        // Create variable and variable ref for definition
         let variable_id = self.variable_arena.insert(Variable { definition, is_parameter });
         self.set_definition_ref(definition, &variable_id);
 
+        // insert variable into scope
         let scope = self.scope_mut(scope_id);
         scope.variables.insert(definition.name, variable_id);
 
-        let variable_scope_id = self.create_scope(Some(*scope_id), statements)?;
+        // create scope for variable
+        let variable_scope_id = self.create_scope(
+            if definition.is_function_definition() {
+                ScopeKind::Function
+            } else {
+                ScopeKind::Object
+            },
+            Some(*scope_id),
+        )?;
         self.set_variable_scope(&variable_id, &variable_scope_id);
-        if statements.is_some() {
-            self.build_function_scope(&variable_scope_id)?;
-        }
 
         Ok((variable_id, variable_scope_id))
+    }
+
+    fn add_statements_to_scope(
+        &mut self,
+        scope_id: &Index,
+        statements: &'input Vec<ast::Statement<'input>>,
+    ) -> Result<(), CompilerError<'input>> {
+        let scope = self.scope_mut(scope_id);
+        scope.statements = Some(statements);
+
+        let scope = self.scope(scope_id);
+
+        // Function scopes must have statements
+        for statement in scope.statements.unwrap() {
+            self.build_statement(scope_id, statement)?;
+        }
+
+        Ok(())
     }
 
     fn build_statement(&mut self, scope_id: &Index, statement: &'input ast::Statement<'input>) -> Result<(), CompilerError<'input>> {
@@ -185,17 +212,18 @@ impl<'input> SymbolTable<'input> {
                 statements,
                 ..
             } => {
-                let (_, function_scope_id) = self.add_variable(scope_id, &definition, Some(statements), false)?;
+                let (_, function_scope_id) = self.add_variable(scope_id, &definition, false)?;
+                self.add_statements_to_scope(&function_scope_id, statements)?;
 
                 if !definition.is_external {
                     for parameter in parameters {
-                        self.add_variable(&function_scope_id, parameter, None, true)?;
+                        self.add_variable(&function_scope_id, parameter, true)?;
                     }
                 }
             }
 
             ast::Statement::DefinitionStatement { definition, .. } => {
-                self.add_variable(scope_id, definition, None, false)?;
+                self.add_variable(scope_id, definition, false)?;
             }
 
             ast::Statement::ExpressionStatement { .. } => {}
@@ -203,18 +231,6 @@ impl<'input> SymbolTable<'input> {
             ast::Statement::ReturnStatement { .. } => {}
 
             ast::Statement::EmptyStatement => {}
-        }
-
-        Ok(())
-    }
-
-    fn build_function_scope(&mut self, scope_id: &Index) -> Result<(), CompilerError<'input>> {
-        let scope = self.scope(scope_id);
-
-        if let Some(statements) = scope.statements {
-            for statement in statements {
-                self.build_statement(scope_id, statement)?;
-            }
         }
 
         Ok(())
