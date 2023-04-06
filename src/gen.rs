@@ -146,7 +146,6 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
         for variable_id in self.symbol_table.variables() {
             let variable = self.symbol_table.variable(&variable_id);
-
             if !variable.is_function() {
                 continue;
             }
@@ -310,7 +309,6 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
         for variable_id in scope.variables.values() {
             let variable = self.symbol_table.variable(variable_id);
-
             if variable.is_function() {
                 continue;
             }

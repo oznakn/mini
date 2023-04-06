@@ -13,7 +13,6 @@ pub enum CompilerError<'input> {
     VariableNotDefined(&'input str),
     InvalidFunctionCall(&'input str),
     InvalidNumberOfArguments(&'input str, usize, usize),
-    VariableTypeCannotBeInfered(&'input str),
     InvalidArgumentType(&'input str, ast::VariableKind, ast::VariableKind),
     InvalidAssignment(&'input str, ast::VariableKind, ast::VariableKind),
     CannotAssignConstVariable(&'input str),
@@ -75,14 +74,6 @@ impl<'input> fmt::Display for CompilerError<'input> {
                     v.yellow(),
                     format!("{}", expected).yellow(),
                     format!("{}", got).yellow(),
-                )
-            }
-            CompilerError::VariableTypeCannotBeInfered(v) => {
-                write!(
-                    f,
-                    "{} type of variable `{}` cannot be infered",
-                    "error:".red(),
-                    v.yellow()
                 )
             }
             CompilerError::InvalidArgumentType(v, expected, got) => {
