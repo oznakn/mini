@@ -58,9 +58,8 @@ pub struct SymbolTable<'input> {
     definition_variable_ref_map: IndexMap<ByAddress<&'input ast::VariableDefinition<'input>>, Index>,
     identifier_variable_ref_map: IndexMap<ByAddress<&'input ast::VariableIdentifier<'input>>, Index>,
 }
-
 impl<'input> SymbolTable<'input> {
-    pub fn from(
+    pub fn create(
         main_def: &'input ast::VariableDefinition<'input>,
         program: &'input ast::Program<'input>,
     ) -> Result<SymbolTable<'input>, CompilerError<'input>> {
@@ -81,11 +80,17 @@ impl<'input> SymbolTable<'input> {
 
         symbol_table.add_statements_to_scope(&main_function_scope_id, &program.statements)?;
 
-        symbol_table.visit_scopes()?;
-
         Ok(symbol_table)
     }
 
+    pub fn compute(&mut self) -> Result<(), CompilerError<'input>> {
+        self.compute_scopes()?;
+
+        Ok(())
+    }
+}
+
+impl<'input> SymbolTable<'input> {
     pub fn variables(&self) -> Vec<Index> {
         self.variable_arena.iter().map(|(idx, _)| idx).collect::<Vec<_>>()
     }
@@ -259,11 +264,17 @@ impl<'input> SymbolTable<'input> {
     ) -> Result<Index, CompilerError<'input>> {
         match identifier {
             ast::VariableIdentifier::Name { name, .. } => self.fetch_variable_by_name(scope_id, name),
+            ast::VariableIdentifier::Property { base, property, .. } => {
+                let base_variable_id = self.fetch_variable_by_identifier(scope_id, base)?;
+                let base_variable_scope_id = self.variable_scope_map.get(&base_variable_id).unwrap(); // TODO: improve
+
+                self.fetch_variable_by_name(&base_variable_scope_id, property)
+            }
             _ => unimplemented!(),
         }
     }
 
-    fn visit_expression(
+    fn compute_expression(
         &mut self,
         scope_id: &Index,
         expression: &'input ast::Expression<'input>,
@@ -298,7 +309,7 @@ impl<'input> SymbolTable<'input> {
             } => {
                 let variable_id = self.fetch_variable_by_identifier(scope_id, identifier)?;
 
-                let kind = self.visit_expression(scope_id, e)?;
+                let kind = self.compute_expression(scope_id, e)?;
 
                 self.set_identifier_ref(identifier, &variable_id);
                 self.set_expression_kind(expression, kind.clone());
@@ -307,8 +318,8 @@ impl<'input> SymbolTable<'input> {
             }
 
             ast::Expression::BinaryExpression { left, right, .. } => {
-                let left_kind = self.visit_expression(scope_id, left)?;
-                let right_kind = self.visit_expression(scope_id, right)?;
+                let left_kind = self.compute_expression(scope_id, left)?;
+                let right_kind = self.compute_expression(scope_id, right)?;
 
                 let kind = left_kind.operation_result(&right_kind);
 
@@ -318,7 +329,7 @@ impl<'input> SymbolTable<'input> {
             }
 
             ast::Expression::UnaryExpression { expression: e, .. } => {
-                let kind = self.visit_expression(scope_id, &e)?;
+                let kind = self.compute_expression(scope_id, &e)?;
 
                 self.set_expression_kind(expression, kind.clone());
 
@@ -326,7 +337,7 @@ impl<'input> SymbolTable<'input> {
             }
 
             ast::Expression::TypeOfExpression { expression: e, .. } => {
-                self.visit_expression(scope_id, &e)?;
+                self.compute_expression(scope_id, &e)?;
 
                 self.set_expression_kind(expression, ast::VariableKind::String);
 
@@ -335,7 +346,7 @@ impl<'input> SymbolTable<'input> {
 
             ast::Expression::ObjectExpression { properties, .. } => {
                 for (_, e) in properties {
-                    self.visit_expression(scope_id, e)?;
+                    self.compute_expression(scope_id, e)?;
                 }
 
                 let kind = ast::VariableKind::Object;
@@ -347,7 +358,7 @@ impl<'input> SymbolTable<'input> {
 
             ast::Expression::ArrayExpression { items, .. } => {
                 for e in items {
-                    self.visit_expression(scope_id, e)?;
+                    self.compute_expression(scope_id, e)?;
                 }
 
                 let kind = ast::VariableKind::Array {
@@ -361,7 +372,7 @@ impl<'input> SymbolTable<'input> {
 
             ast::Expression::CallExpression { identifier, arguments, .. } => {
                 for argument in arguments {
-                    self.visit_expression(scope_id, argument)?;
+                    self.compute_expression(scope_id, argument)?;
                 }
 
                 let variable_id = self.fetch_variable_by_identifier(scope_id, identifier)?;
@@ -384,25 +395,25 @@ impl<'input> SymbolTable<'input> {
         }
     }
 
-    fn visit_statement(&mut self, scope_id: &Index, statement: &'input ast::Statement<'input>) -> Result<(), CompilerError<'input>> {
+    fn compute_statement(&mut self, scope_id: &Index, statement: &'input ast::Statement<'input>) -> Result<(), CompilerError<'input>> {
         match statement {
             ast::Statement::ExpressionStatement { expression } => {
-                self.visit_expression(scope_id, expression)?;
+                self.compute_expression(scope_id, expression)?;
             }
 
             ast::Statement::ReturnStatement { expression, .. } => {
                 if let Some(expression) = expression {
-                    self.visit_expression(scope_id, expression)?;
+                    self.compute_expression(scope_id, expression)?;
                 }
             }
 
             ast::Statement::DefinitionStatement { expression, .. } => {
                 if let Some(expression) = expression {
-                    self.visit_expression(scope_id, expression)?;
+                    self.compute_expression(scope_id, expression)?;
                 }
             }
 
-            ast::Statement::FunctionStatement { .. } => {} // the function statements will be visited by visit_scopes
+            ast::Statement::FunctionStatement { .. } => {} // the function statements will be computeed by compute_scopes
 
             ast::Statement::EmptyStatement => {}
         }
@@ -410,23 +421,23 @@ impl<'input> SymbolTable<'input> {
         Ok(())
     }
 
-    fn visit_scope(&mut self, scope_id: &Index) -> Result<(), CompilerError<'input>> {
+    fn compute_scope(&mut self, scope_id: &Index) -> Result<(), CompilerError<'input>> {
         let scope = self.scope_mut(scope_id);
 
         if let Some(statements) = scope.statements {
             for statement in statements {
-                self.visit_statement(scope_id, statement)?;
+                self.compute_statement(scope_id, statement)?;
             }
         }
 
         Ok(())
     }
 
-    fn visit_scopes(&mut self) -> Result<(), CompilerError<'input>> {
+    fn compute_scopes(&mut self) -> Result<(), CompilerError<'input>> {
         let scopes = self.scope_arena.iter().map(|(i, _)| i).collect::<Vec<_>>();
 
         for scope_id in scopes {
-            self.visit_scope(&scope_id)?;
+            self.compute_scope(&scope_id)?;
         }
 
         Ok(())

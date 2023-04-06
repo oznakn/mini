@@ -29,7 +29,8 @@ fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
         is_external: false,
     };
 
-    let symbol_table = st::SymbolTable::from(&main_def, &program).map_err(|err| err.to_string())?;
+    let mut symbol_table = st::SymbolTable::create(&main_def, &program).map_err(|err| err.to_string())?;
+    symbol_table.compute().map_err(|err| err.to_string())?;
 
     let triple = target_lexicon::Triple::host();
     let llvm_triple = TargetTriple::create(&triple.to_string());
