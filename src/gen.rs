@@ -73,39 +73,24 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         Ok(())
     }
 
-    fn write_to_file(
-        &self,
-        triple: &TargetTriple,
-        tmp_file: PathBuf,
-    ) -> Result<(), CompilerError<'input>> {
-        self.module.verify().map_err(|err| {
-            CompilerError::CodeGenError(format!("Could not verify module: {}", err))
-        })?;
+    fn write_to_file(&self, triple: &TargetTriple, tmp_file: PathBuf) -> Result<(), CompilerError<'input>> {
+        self.module
+            .verify()
+            .map_err(|err| CompilerError::CodeGenError(format!("Could not verify module: {}", err)))?;
 
         Target::initialize_all(&InitializationConfig::default());
 
         let target = Target::from_triple(&triple).unwrap();
-        let target_machine = target.create_target_machine(
-            &triple,
-            "",
-            "",
-            OptimizationLevel::None,
-            RelocMode::Default,
-            CodeModel::Default,
-        );
+        let target_machine = target.create_target_machine(&triple, "", "", OptimizationLevel::None, RelocMode::Default, CodeModel::Default);
 
         if let Some(target_machine) = target_machine {
             // println!("{}", self.module.print_to_string().to_str().unwrap());
 
             target_machine
                 .write_to_file(&self.module, inkwell::targets::FileType::Object, &tmp_file)
-                .map_err(|err| {
-                    CompilerError::CodeGenError(format!("Could not write object file: {}", err))
-                })?;
+                .map_err(|err| CompilerError::CodeGenError(format!("Could not write object file: {}", err)))?;
         } else {
-            return Err(CompilerError::CodeGenError(
-                "Could not create target machine".to_string(),
-            ));
+            return Err(CompilerError::CodeGenError("Could not create target machine".to_string()));
         }
 
         Ok(())
@@ -117,19 +102,13 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         (function_id, &self.functions.get(&function_id).unwrap())
     }
 
-    fn get_pointer_for_definition(
-        &self,
-        definition: &'input ast::VariableDefinition<'input>,
-    ) -> &PointerValue<'ctx> {
+    fn get_pointer_for_definition(&self, definition: &'input ast::VariableDefinition<'input>) -> &PointerValue<'ctx> {
         let variable_id = self.symbol_table.definition_ref(definition);
 
         self.variables.get(variable_id).unwrap()
     }
 
-    fn get_pointer_for_identifier(
-        &self,
-        identifier: &'input ast::VariableIdentifier<'input>,
-    ) -> &PointerValue<'ctx> {
+    fn get_pointer_for_identifier(&self, identifier: &'input ast::VariableIdentifier<'input>) -> &PointerValue<'ctx> {
         let variable_id = self.symbol_table.identifier_ref(identifier);
 
         self.variables.get(variable_id).unwrap()
@@ -157,22 +136,13 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         Ok(())
     }
 
-    fn init_builtin_function(
-        &self,
-        name: &str,
-        fn_type: FunctionType<'ctx>,
-    ) -> Result<FunctionValue<'ctx>, CompilerError<'input>> {
-        let fn_value = self
-            .module
-            .add_function(name, fn_type, Some(Linkage::ExternalWeak));
+    fn init_builtin_function(&self, name: &str, fn_type: FunctionType<'ctx>) -> Result<FunctionValue<'ctx>, CompilerError<'input>> {
+        let fn_value = self.module.add_function(name, fn_type, Some(Linkage::ExternalWeak));
 
         Ok(fn_value)
     }
 
-    fn init_function(
-        &self,
-        function_variable_id: Index,
-    ) -> Result<FunctionValue<'ctx>, CompilerError<'input>> {
+    fn init_function(&self, function_variable_id: Index) -> Result<FunctionValue<'ctx>, CompilerError<'input>> {
         let function = self.symbol_table.variable(&function_variable_id);
 
         let func_name = if self.symbol_table.main_function.unwrap() == function_variable_id {
@@ -207,11 +177,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     }
 
     fn compile(&mut self) -> Result<(), CompilerError<'input>> {
-        let keys = self
-            .functions
-            .iter()
-            .map(|(i, _)| i.to_owned())
-            .collect::<Vec<_>>();
+        let keys = self.functions.iter().map(|(i, _)| i.to_owned()).collect::<Vec<_>>();
 
         for function_id in keys {
             let function_variable = self.symbol_table.variable(&function_id);
@@ -231,20 +197,12 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
         let function = self.builtin_functions.get(name).unwrap();
 
-        let v = self
-            .builder
-            .build_call(*function, args, "tmp")
-            .try_as_basic_value()
-            .left()
-            .unwrap();
+        let v = self.builder.build_call(*function, args, "tmp").try_as_basic_value().left().unwrap();
 
         Ok(v)
     }
 
-    fn visit_function(
-        &mut self,
-        function_variable_id: &Index,
-    ) -> Result<(), CompilerError<'input>> {
+    fn visit_function(&mut self, function_variable_id: &Index) -> Result<(), CompilerError<'input>> {
         self.current_function_index = Some(function_variable_id.to_owned());
 
         let scope = self.symbol_table.function_scope(function_variable_id);
@@ -278,9 +236,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 continue;
             }
 
-            let alloca = self
-                .builder
-                .build_alloca(self.val_type, variable.definition.name);
+            let alloca = self.builder.build_alloca(self.val_type, variable.definition.name);
             self.variables.insert(*variable_id, alloca);
 
             if variable.is_parameter {
@@ -322,10 +278,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         Ok(())
     }
 
-    fn visit_statements(
-        &mut self,
-        statements: &'input [ast::Statement<'input>],
-    ) -> Result<(), CompilerError<'input>> {
+    fn visit_statements(&mut self, statements: &'input [ast::Statement<'input>]) -> Result<(), CompilerError<'input>> {
         for statement in statements.iter() {
             self.visit_statement(statement)?;
         }
@@ -333,10 +286,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         Ok(())
     }
 
-    fn visit_statement(
-        &mut self,
-        statement: &'input ast::Statement<'input>,
-    ) -> Result<(), CompilerError<'input>> {
+    fn visit_statement(&mut self, statement: &'input ast::Statement<'input>) -> Result<(), CompilerError<'input>> {
         match statement {
             ast::Statement::ReturnStatement { expression, .. } => {
                 self.put_return(expression.as_ref(), false)?;
@@ -347,9 +297,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             }
 
             ast::Statement::DefinitionStatement {
-                definition,
-                expression,
-                ..
+                definition, expression, ..
             } => {
                 let ptr = self.get_pointer_for_definition(definition);
                 let v = if let Some(expression) = expression {
@@ -375,13 +323,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         &self,
         expression: &'input ast::Expression<'input>,
     ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
-        if let ast::Expression::BinaryExpression {
-            operator,
-            left,
-            right,
-            ..
-        } = expression
-        {
+        if let ast::Expression::BinaryExpression { operator, left, right, .. } = expression {
             let builtin_func_name = match operator {
                 ast::BinaryOperator::Addition => "val_op_add",
                 ast::BinaryOperator::Subtraction => "val_op_sub",
@@ -418,9 +360,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         expression: &'input ast::Expression<'input>,
     ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
         if let ast::Expression::UnaryExpression {
-            operator,
-            expression: e,
-            ..
+            operator, expression: e, ..
         } = expression
         {
             let builtin_func_name = match operator {
@@ -431,9 +371,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
             let v = self.translate_expression(e)?.into_pointer_value();
 
-            let result = self
-                .call_builtin(builtin_func_name, &[v.into()])?
-                .into_pointer_value();
+            let result = self.call_builtin(builtin_func_name, &[v.into()])?.into_pointer_value();
 
             Ok(result.into())
         } else {
@@ -446,19 +384,14 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         expression: &'input ast::Expression<'input>,
     ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
         if let ast::Expression::ObjectExpression { properties, .. } = expression {
-            let result = self
-                .call_builtin("new_object_val", &[])?
-                .into_pointer_value();
+            let result = self.call_builtin("new_object_val", &[])?.into_pointer_value();
 
             for (key, e) in properties.iter() {
                 let k = self.builder.build_global_string_ptr(key, "key");
 
                 let v = self.translate_expression(e)?;
 
-                self.call_builtin(
-                    "val_object_set",
-                    &[result.into(), k.as_pointer_value().into(), v.into()],
-                )?;
+                self.call_builtin("val_object_set", &[result.into(), k.as_pointer_value().into(), v.into()])?;
             }
 
             Ok(result.into())
@@ -471,12 +404,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         &self,
         expression: &'input ast::Expression<'input>,
     ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
-        if let ast::Expression::CallExpression {
-            identifier,
-            arguments,
-            ..
-        } = expression
-        {
+        if let ast::Expression::CallExpression { identifier, arguments, .. } = expression {
             let function_variable_id = self.symbol_table.identifier_ref(identifier);
             let function = self.symbol_table.variable(function_variable_id);
 
@@ -509,14 +437,9 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             }
 
             if !rest_values.is_empty() {
-                let array_size = self
-                    .context
-                    .i64_type()
-                    .const_int(rest_values.len() as u64, false);
+                let array_size = self.context.i64_type().const_int(rest_values.len() as u64, false);
 
-                let array = self
-                    .call_builtin("new_array_val", &[array_size.into()])?
-                    .into_pointer_value();
+                let array = self.call_builtin("new_array_val", &[array_size.into()])?.into_pointer_value();
 
                 for v in rest_values.iter() {
                     self.call_builtin("val_array_push", &[array.into(), (*v).into()])?;
@@ -540,10 +463,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         }
     }
 
-    fn translate_expression(
-        &self,
-        expression: &'input ast::Expression<'input>,
-    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
+    fn translate_expression(&self, expression: &'input ast::Expression<'input>) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
         match expression {
             ast::Expression::ConstantExpression { value, .. } => match value {
                 ast::Constant::Undefined => {
@@ -559,10 +479,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 }
 
                 ast::Constant::Boolean(data) => {
-                    let v = self
-                        .context
-                        .bool_type()
-                        .const_int(if *data { 1 } else { 0 }, false);
+                    let v = self.context.bool_type().const_int(if *data { 1 } else { 0 }, false);
 
                     let v = self.call_builtin("new_bool_val", &[v.into()])?;
 
@@ -594,24 +511,18 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 }
             },
 
-            ast::Expression::BinaryExpression { .. } => {
-                self.translate_binary_expression(expression)
-            }
+            ast::Expression::BinaryExpression { .. } => self.translate_binary_expression(expression),
 
             ast::Expression::UnaryExpression { .. } => self.translate_unary_expression(expression),
 
             ast::Expression::CallExpression { .. } => self.translate_call_expression(expression),
 
-            ast::Expression::ObjectExpression { .. } => {
-                self.translate_object_expression(expression)
-            }
+            ast::Expression::ObjectExpression { .. } => self.translate_object_expression(expression),
 
             ast::Expression::ArrayExpression { items, .. } => {
                 let array_size = self.context.i64_type().const_int(items.len() as u64, false);
 
-                let array = self
-                    .call_builtin("new_array_val", &[array_size.into()])?
-                    .into_pointer_value();
+                let array = self.call_builtin("new_array_val", &[array_size.into()])?.into_pointer_value();
 
                 for v in items.iter() {
                     let v = self.translate_expression(v)?;
@@ -624,9 +535,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             ast::Expression::TypeOfExpression { expression, .. } => {
                 let v = self.translate_expression(expression)?;
 
-                let v = self
-                    .call_builtin("val_get_type", &[v.into()])?
-                    .into_pointer_value();
+                let v = self.call_builtin("val_get_type", &[v.into()])?.into_pointer_value();
 
                 Ok(v.into())
             }
@@ -640,9 +549,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             }
 
             ast::Expression::AssignmentExpression {
-                identifier,
-                expression,
-                ..
+                identifier, expression, ..
             } => {
                 let ptr = self.get_pointer_for_identifier(identifier);
 
@@ -661,11 +568,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         }
     }
 
-    fn put_return(
-        &mut self,
-        expression: Option<&'input ast::Expression<'input>>,
-        terminate: bool,
-    ) -> Result<(), CompilerError<'input>> {
+    fn put_return(&mut self, expression: Option<&'input ast::Expression<'input>>, terminate: bool) -> Result<(), CompilerError<'input>> {
         let v = if let Some(expression) = expression {
             self.translate_expression(expression)?
         } else {
@@ -677,9 +580,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         self.builder.build_return(Some(&v));
 
         if !terminate {
-            let ret_block = self
-                .context
-                .append_basic_block(*(self.current_function().1), "next");
+            let ret_block = self.context.append_basic_block(*(self.current_function().1), "next");
             self.builder.position_at_end(ret_block);
         }
 
