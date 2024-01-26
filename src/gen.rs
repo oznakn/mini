@@ -178,19 +178,19 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
         let func_name = if self.symbol_table.main_function.unwrap() == function_variable_id {
             MAIN_FUNCTION_NAME.to_owned()
-        } else if function.definition.is_external {
-            function.definition.name.to_owned()
+        } else if function.is_external() {
+            function.get_name().to_owned()
         } else {
             new_function_label()
         };
 
-        let linkage = if function.definition.is_external {
+        let linkage = if function.is_external() {
             Linkage::ExternalWeak
         } else {
             Linkage::External
         };
 
-        if let ast::VariableKind::Function { parameters, .. } = &function.definition.kind {
+        if let ast::VariableKind::Function { parameters, .. } = function.get_kind() {
             let parameters = vec![self.val_type.as_basic_type_enum()]
                 .iter()
                 .cycle()
@@ -217,7 +217,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         for function_id in keys {
             let function_variable = self.symbol_table.variable(&function_id);
 
-            if !function_variable.definition.is_external {
+            if !function_variable.is_external() {
                 self.visit_function(&function_id)?;
             }
         }
@@ -257,7 +257,9 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         {
             self.define_variables()?;
 
-            self.visit_statements(scope.statements)?;
+            if let Some(statements) = scope.statements {
+                self.visit_statements(statements)?;
+            }
 
             self.put_return(None, true)?;
         }
@@ -281,11 +283,11 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
             let alloca = self
                 .builder
-                .build_alloca(self.val_type, variable.definition.name)?;
+                .build_alloca(self.val_type, variable.get_name())?;
 
             self.variables.insert(*variable_id, alloca);
 
-            if variable.is_parameter {
+            if variable.is_parameter() {
                 let (_, function) = self.current_function();
 
                 let v = function.get_nth_param(parameter_index).unwrap();
