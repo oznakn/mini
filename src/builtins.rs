@@ -45,6 +45,7 @@ pub fn create_builtin_functions<'ctx>(
     );
 
     map.insert("val_get_type", val_type.fn_type(&[val_type.into()], false));
+    map.insert("val_get_value", val_type.fn_type(&[val_type.into()], false));
 
     map.insert(
         "new_array_val",

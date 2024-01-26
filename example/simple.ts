@@ -19,13 +19,5 @@ declare function echo(...s: any[]): void;
 // echo(x);
 // x = null;
 // echo (x);
-
-echo(true);
-let x = false;
-echo(false);
-
 let obj = { a: 10, b: 'merhaba' };
-echo(obj);
-
-echo(typeof -3);
-echo (!(4 < 5));
+echo(obj.a);

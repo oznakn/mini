@@ -636,10 +636,13 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
             ast::Expression::VariableExpression { identifier, .. } => {
                 let ptr = self.get_pointer_for_identifier(identifier);
+                let obj = self.builder.build_load(*ptr, "temp")?;
 
-                let v = self.builder.build_load(*ptr, "temp")?;
+                let v = self
+                    .call_builtin("val_get_value", &[obj.into()])?
+                    .into_pointer_value();
 
-                Ok(v)
+                Ok(v.into())
             }
 
             ast::Expression::AssignmentExpression {

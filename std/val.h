@@ -103,4 +103,8 @@ val_t *val_get_type(val_t *v) {
     return result;
 }
 
+val_t *val_get_value(val_t *v, char *key) {
+    return new_str_val("yey");
+}
+
 #endif

@@ -45,7 +45,6 @@ pub struct SymbolTable<'input> {
     variable_arena: Arena<Variable<'input>>,
 
     function_scope_map: IndexMap<Index, Index>,
-    expression_kind_map: IndexMap<ByAddress<&'input ast::Expression<'input>>, ast::VariableKind>,
 
     definition_ref_map: IndexMap<ByAddress<&'input ast::VariableDefinition<'input>>, Index>,
     identifier_ref_map: IndexMap<ByAddress<&'input ast::VariableIdentifier<'input>>, Index>,
@@ -61,7 +60,6 @@ impl<'input> SymbolTable<'input> {
             scope_arena: Arena::new(),
             variable_arena: Arena::new(),
             function_scope_map: IndexMap::new(),
-            expression_kind_map: IndexMap::new(),
             definition_ref_map: IndexMap::new(),
             identifier_ref_map: IndexMap::new(),
         };
@@ -110,23 +108,6 @@ impl<'input> SymbolTable<'input> {
 
     fn set_function_scope(&mut self, function_id: &Index, scope_id: &Index) {
         self.function_scope_map.insert(*function_id, *scope_id);
-    }
-
-    pub fn expression_kind(
-        &self,
-        expression: &'input ast::Expression<'input>,
-    ) -> &ast::VariableKind {
-        self.expression_kind_map
-            .get(&ByAddress(expression))
-            .unwrap()
-    }
-
-    fn set_expression_kind(
-        &mut self,
-        expression: &'input ast::Expression<'input>,
-        kind: ast::VariableKind,
-    ) {
-        self.expression_kind_map.insert(ByAddress(expression), kind);
     }
 
     pub fn definition_ref(&self, definition: &'input ast::VariableDefinition<'input>) -> &Index {
@@ -265,6 +246,9 @@ impl<'input> SymbolTable<'input> {
             ast::VariableIdentifier::Name { name, .. } => {
                 self.fetch_variable_by_name(scope_id, name)
             }
+            ast::VariableIdentifier::Property { base, .. } => {
+                self.fetch_variable_by_identifier(scope_id, base)
+            }
             _ => unimplemented!(),
         }
     }
@@ -273,98 +257,45 @@ impl<'input> SymbolTable<'input> {
         &mut self,
         scope_id: &Index,
         expression: &'input ast::Expression<'input>,
-    ) -> Result<ast::VariableKind, CompilerError<'input>> {
-        if let Some(kind) = self.expression_kind_map.get(&ByAddress(expression)) {
-            return Ok(kind.clone());
-        }
-
+    ) -> Result<(), CompilerError<'input>> {
         match expression {
-            ast::Expression::ConstantExpression { value, .. } => {
-                let kind = value.get_kind();
-
-                self.set_expression_kind(expression, kind.clone());
-
-                Ok(kind)
-            }
+            ast::Expression::ConstantExpression { .. } => {}
 
             ast::Expression::VariableExpression { identifier, .. } => {
                 let variable_id = self.fetch_variable_by_identifier(scope_id, identifier)?;
-                let variable = self.variable(&variable_id);
-
-                let kind = variable.definition.kind.clone();
 
                 self.set_identifier_ref(identifier, &variable_id);
-                self.set_expression_kind(expression, kind.clone());
-
-                Ok(kind)
             }
 
-            ast::Expression::AssignmentExpression {
-                expression: e,
-                identifier,
-                ..
-            } => {
+            ast::Expression::AssignmentExpression { identifier, .. } => {
                 let variable_id = self.fetch_variable_by_identifier(scope_id, identifier)?;
 
-                let kind = self.visit_expression(scope_id, e)?;
-
                 self.set_identifier_ref(identifier, &variable_id);
-                self.set_expression_kind(expression, kind.clone());
-
-                Ok(kind)
             }
 
             ast::Expression::BinaryExpression { left, right, .. } => {
-                let left_kind = self.visit_expression(scope_id, left)?;
-                let right_kind = self.visit_expression(scope_id, right)?;
-
-                let kind = left_kind.operation_result(&right_kind);
-
-                self.set_expression_kind(expression, kind.clone());
-
-                Ok(kind)
+                self.visit_expression(scope_id, left)?;
+                self.visit_expression(scope_id, right)?;
             }
 
             ast::Expression::UnaryExpression { expression: e, .. } => {
-                let kind = self.visit_expression(scope_id, &e)?;
-
-                self.set_expression_kind(expression, kind.clone());
-
-                Ok(kind)
+                self.visit_expression(scope_id, &e)?;
             }
 
             ast::Expression::TypeOfExpression { expression: e, .. } => {
                 self.visit_expression(scope_id, &e)?;
-
-                self.set_expression_kind(expression, ast::VariableKind::String);
-
-                Ok(ast::VariableKind::String)
             }
 
             ast::Expression::ObjectExpression { properties, .. } => {
                 for (_, e) in properties {
                     self.visit_expression(scope_id, e)?;
                 }
-
-                let kind = ast::VariableKind::Object;
-
-                self.set_expression_kind(expression, kind.clone());
-
-                Ok(kind)
             }
 
             ast::Expression::ArrayExpression { items, .. } => {
                 for e in items {
                     self.visit_expression(scope_id, e)?;
                 }
-
-                let kind = ast::VariableKind::Array {
-                    kind: Box::new(ast::VariableKind::Any),
-                };
-
-                self.set_expression_kind(expression, kind.clone());
-
-                Ok(kind)
             }
 
             ast::Expression::CallExpression {
@@ -380,13 +311,8 @@ impl<'input> SymbolTable<'input> {
                 let variable = self.variable(&variable_id);
 
                 match &variable.definition.kind {
-                    ast::VariableKind::Function { return_kind, .. } => {
-                        let kind = return_kind.as_ref().clone();
-
+                    ast::VariableKind::Function { .. } => {
                         self.set_identifier_ref(identifier, &variable_id);
-                        self.set_expression_kind(expression, kind.clone());
-
-                        Ok(kind)
                     }
                     _ => return Err(CompilerError::InvalidFunctionCall(variable.definition.name)),
                 }
@@ -394,6 +320,8 @@ impl<'input> SymbolTable<'input> {
 
             ast::Expression::Empty => unreachable!("Empty expression"),
         }
+
+        Ok(())
     }
 
     fn visit_statement(
