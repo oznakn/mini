@@ -234,7 +234,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
         let v = self
             .builder
-            .build_call(*function, args, "tmp")
+            .build_call(*function, args, "tmp")?
             .try_as_basic_value()
             .left()
             .unwrap();
@@ -281,14 +281,15 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
             let alloca = self
                 .builder
-                .build_alloca(self.val_type, variable.definition.name);
+                .build_alloca(self.val_type, variable.definition.name)?;
+
             self.variables.insert(*variable_id, alloca);
 
             if variable.is_parameter {
                 let (_, function) = self.current_function();
 
                 let v = function.get_nth_param(parameter_index).unwrap();
-                self.builder.build_store(alloca, v);
+                self.builder.build_store(alloca, v)?;
 
                 self.call_builtin("link_val", &[v.into()])?;
 
@@ -296,7 +297,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             } else {
                 let v = self.val_type.const_zero();
 
-                self.builder.build_store(alloca, v);
+                self.builder.build_store(alloca, v)?;
             }
         }
 
@@ -317,7 +318,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
             let ptr = self.variables.get(variable_id).unwrap();
 
-            let v = self.builder.build_load(*ptr, "tmp");
+            let v = self.builder.build_load(*ptr, "tmp")?;
             self.call_builtin("unlink_val", &[v.into()])?;
         }
 
@@ -362,7 +363,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
                 self.call_builtin("link_val", &[v.into()])?;
 
-                self.builder.build_store(*ptr, v);
+                self.builder.build_store(*ptr, v)?;
             }
 
             ast::Statement::FunctionStatement { .. } => {} // functions are handled in visit_function
@@ -453,7 +454,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 .into_pointer_value();
 
             for (key, e) in properties.iter() {
-                let k = self.builder.build_global_string_ptr(key, "key");
+                let k = self.builder.build_global_string_ptr(key, "key")?;
 
                 let v = self.translate_expression(e)?;
 
@@ -531,7 +532,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
             let v = self
                 .builder
-                .build_call(*fn_value, &argument_values.as_slice(), "tmp")
+                .build_call(*fn_value, &argument_values.as_slice(), "tmp")?
                 .try_as_basic_value()
                 .left()
                 .unwrap();
@@ -588,7 +589,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 }
 
                 ast::Constant::String(data) => {
-                    let s = self.builder.build_global_string_ptr(data, "string");
+                    let s = self.builder.build_global_string_ptr(data, "string")?;
 
                     let v = self.call_builtin("new_str_val", &[s.as_pointer_value().into()])?;
 
@@ -636,7 +637,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             ast::Expression::VariableExpression { identifier, .. } => {
                 let ptr = self.get_pointer_for_identifier(identifier);
 
-                let v = self.builder.build_load(*ptr, "temp");
+                let v = self.builder.build_load(*ptr, "temp")?;
 
                 Ok(v)
             }
@@ -648,13 +649,13 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             } => {
                 let ptr = self.get_pointer_for_identifier(identifier);
 
-                let v = self.builder.build_load(*ptr, "tmp");
+                let v = self.builder.build_load(*ptr, "tmp")?;
                 self.call_builtin("unlink_val", &[v.into()])?;
 
                 let v = self.translate_expression(expression)?;
                 self.call_builtin("link_val", &[v.into()])?;
 
-                self.builder.build_store(*ptr, v);
+                self.builder.build_store(*ptr, v)?;
 
                 Ok(v)
             }
@@ -676,7 +677,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
         self.clear_variables()?;
 
-        self.builder.build_return(Some(&v));
+        self.builder.build_return(Some(&v))?;
 
         if !terminate {
             let ret_block = self

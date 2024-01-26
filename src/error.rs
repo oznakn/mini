@@ -1,12 +1,14 @@
 use colored::Colorize;
+use inkwell::builder::BuilderError;
 use lalrpop_util::{lexer::Token, ParseError};
 use std::fmt;
 
 use crate::ast;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum CompilerError<'input> {
     CliError(&'input str),
+    BuilderError(BuilderError),
     ParserError(ParseError<usize, Token<'input>, &'static str>),
     CodeGenError(String),
     VariableAlreadyDefined(&'input str),
@@ -18,6 +20,12 @@ pub enum CompilerError<'input> {
     InvalidAssignment(&'input str, ast::VariableKind, ast::VariableKind),
     CannotAssignConstVariable(&'input str),
     CannotReturnFromGlobalScope,
+}
+
+impl<'input> From<BuilderError> for CompilerError<'input> {
+    fn from(err: BuilderError) -> Self {
+        CompilerError::BuilderError(err)
+    }
 }
 
 impl<'input> fmt::Display for CompilerError<'input> {
@@ -41,6 +49,7 @@ impl<'input> fmt::Display for CompilerError<'input> {
 
                 writeln!(f, "{}", s)
             }
+            CompilerError::BuilderError(err) => write!(f, "{} {}", "error:".red(), err),
             CompilerError::CliError(err) => write!(f, "{} {}", "error:".red(), err),
             CompilerError::CodeGenError(err) => write!(f, "{} {}", "error:".red(), err),
             CompilerError::VariableAlreadyDefined(v) => {
