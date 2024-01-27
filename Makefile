@@ -1,11 +1,14 @@
 build:
+	/opt/homebrew/opt/llvm/bin/clang -c -flto=thin std/std.c
 	cargo build
 
 run: build
-	./target/debug/mini example/simple.ts
+	./target/debug/mini --optimize example/simple.ts
 
 test: build
-	/opt/homebrew/opt/llvm/bin/clang -c -emit-llvm std/std.c
-	./target/debug/mini --optimize example/simple.ts
-	gcc -Wl,-ld_classic -o foo foo.o
+	./target/debug/mini example/simple.ts
 	./foo
+
+release:
+	/opt/homebrew/opt/llvm/bin/clang -c -flto=thin std/std.c
+	cargo build --release

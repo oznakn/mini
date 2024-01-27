@@ -39,13 +39,15 @@ fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
     let triple = target_lexicon::Triple::host();
     let llvm_triple = TargetTriple::create(&triple.to_string());
 
+    let out_file: &String = matches.get_one::<String>("output").unwrap();
+
     let ir_context = Context::create();
     gen::IRGenerator::generate(
         &symbol_table,
         &ir_context,
         &llvm_triple,
         matches.is_present("optimize"),
-        std::path::Path::new("foo.o").to_path_buf(),
+        std::path::Path::new(out_file).to_path_buf(),
     )
     .map_err(|err| CompilerError::CodeGenError(err.to_string()).to_string())?;
 
@@ -61,8 +63,17 @@ pub fn run() {
         .arg(
             Arg::with_name("input")
                 .help("Sets the input file to use")
+                .takes_value(true)
                 .required(true)
                 .index(1),
+        )
+        .arg(
+            Arg::with_name("output")
+                .long("output")
+                .short('o')
+                .takes_value(true)
+                .default_value("foo")
+                .help("Output file"),
         )
         .arg(
             Arg::with_name("optimize")

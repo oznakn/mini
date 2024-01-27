@@ -19,6 +19,7 @@ use crate::error::CompilerError;
 use crate::st;
 
 const MAIN_FUNCTION_NAME: &str = "main";
+const STD_LIBRARY_CODE: &'static [u8] = include_bytes!("../std.bc");
 
 fn get_val_type<'ctx>(context: &'ctx Context) -> BasicTypeEnum<'ctx> {
     context
@@ -57,16 +58,12 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         context: &'ctx Context,
         triple: &TargetTriple,
         optimize: bool,
-        tmp_file: PathBuf,
+        out_file: PathBuf,
     ) -> Result<(), CompilerError<'input>> {
         let std_module_content =
-            MemoryBuffer::create_from_file(std::path::Path::new("./std.bc")).unwrap();
+            MemoryBuffer::create_from_memory_range_copy(STD_LIBRARY_CODE, "std");
+
         let module = context.create_module_from_ir(std_module_content).unwrap();
-
-        module.get_functions().into_iter().for_each(|function| {
-            function.set_linkage(Linkage::External);
-        });
-
         let mut ir_generator = IRGenerator {
             optimize,
             symbol_table,
@@ -80,7 +77,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         };
         ir_generator.init()?;
         ir_generator.compile()?;
-        ir_generator.write_to_file(triple, tmp_file)?;
+        ir_generator.write_to_file(triple, out_file)?;
 
         Ok(())
     }
@@ -88,7 +85,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     fn write_to_file(
         &self,
         triple: &TargetTriple,
-        tmp_file: PathBuf,
+        out_file: PathBuf,
     ) -> Result<(), CompilerError<'input>> {
         self.module.verify().map_err(|err| {
             CompilerError::CodeGenError(format!("Could not verify module: {}", err))
@@ -96,24 +93,42 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
         Target::initialize_all(&InitializationConfig::default());
 
+        let optimize_level = if self.optimize {
+            OptimizationLevel::Aggressive
+        } else {
+            OptimizationLevel::None
+        };
         let target = Target::from_triple(&triple).unwrap();
         let target_machine = target.create_target_machine(
             &triple,
             "",
             "",
-            OptimizationLevel::None,
+            optimize_level,
             RelocMode::Default,
             CodeModel::Default,
         );
 
         if let Some(target_machine) = target_machine {
             // println!("{}", self.module.print_to_string().to_str().unwrap());
+            let std_tempfile = tempfile::NamedTempFile::new().unwrap();
 
             target_machine
-                .write_to_file(&self.module, inkwell::targets::FileType::Object, &tmp_file)
+                .write_to_file(
+                    &self.module,
+                    inkwell::targets::FileType::Object,
+                    std_tempfile.path(),
+                )
                 .map_err(|err| {
                     CompilerError::CodeGenError(format!("Could not write object file: {}", err))
                 })?;
+
+            std::process::Command::new("gcc")
+                .arg("-Wl,-ld_classic")
+                .arg("-o")
+                .arg(out_file)
+                .arg(std_tempfile.path())
+                .status()
+                .unwrap();
         } else {
             return Err(CompilerError::CodeGenError(
                 "Could not create target machine".to_string(),
