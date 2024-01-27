@@ -277,7 +277,7 @@ Factor: ast::Expression<'input> = {
         location: (l1, l2),
         identifier
     },
-    <l1:@L> <identifier:VariableIdentifier> "(" <arguments:CommaList<Expression>> ")"  <l2:@R> => ast::Expression::CallExpression {
+    <l1:@L> <identifier:VariableIdentifier> "(" <arguments:CommaList<Expression>> ")" <l2:@R> => ast::Expression::CallExpression {
         location: (l1, l2),
         identifier,
         arguments

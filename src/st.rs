@@ -225,9 +225,9 @@ impl<'input> SymbolTable<'input> {
         let variable_scope_id = scope_id.unwrap_or(&function_scope_id);
         let variable_id = self.create_static_variable(&variable_scope_id, definition, false)?;
 
-        self.set_function_scope(&variable_id, &variable_scope_id);
+        self.set_function_scope(&variable_id, &function_scope_id);
 
-        Ok((variable_id, variable_scope_id.to_owned()))
+        Ok((variable_id, function_scope_id.to_owned()))
     }
 
     fn create_property_variable(
