@@ -139,13 +139,27 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
                 Ok(v)
             }
-            st::Variable::Computed { base, name } => {
+            st::Variable::Property { base, property } => {
                 let obj = self.get_value_for_variable(base)?;
 
-                let s = self.builder.build_global_string_ptr(name, "string")?;
+                let s = self.builder.build_global_string_ptr(property, "string")?;
 
                 let result_ptr = self
                     .call_builtin("val_object_get", &[obj.into(), s.as_pointer_value().into()])?
+                    .into_pointer_value();
+
+                Ok(result_ptr.into())
+            }
+            st::Variable::Indexed {
+                base,
+                index: expression,
+            } => {
+                let obj = self.get_value_for_variable(base)?;
+
+                let i = self.translate_expression(expression)?;
+
+                let result_ptr = self
+                    .call_builtin("val_object_get", &[obj.into(), i.into()])?
                     .into_pointer_value();
 
                 Ok(result_ptr.into())
@@ -182,15 +196,27 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
                 Ok(v)
             }
-            st::Variable::Computed { base, name } => {
+            st::Variable::Property { base, property } => {
                 let obj = self.get_value_for_variable(base)?;
 
-                let s = self.builder.build_global_string_ptr(name, "string")?;
+                let s = self.builder.build_global_string_ptr(property, "string")?;
 
                 self.call_builtin(
                     "val_object_set",
                     &[obj.into(), s.as_pointer_value().into(), v.into()],
                 )?;
+
+                Ok(v)
+            }
+            st::Variable::Indexed {
+                base,
+                index: expression,
+            } => {
+                let obj = self.get_value_for_variable(base)?;
+
+                let i = self.translate_expression(expression)?;
+
+                self.call_builtin("val_object_set", &[obj.into(), i.into(), v.into()])?;
 
                 Ok(v)
             }
@@ -320,7 +346,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     ) -> Result<(), CompilerError<'input>> {
         self.current_function_index = Some(function_variable_id.to_owned());
 
-        let scope = self.symbol_table.variable_scope(function_variable_id);
+        let scope = self.symbol_table.function_scope(function_variable_id);
         let function = self.functions.get(function_variable_id).unwrap();
 
         let basic_block = self.context.append_basic_block(*function, "entry");
@@ -342,7 +368,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     fn define_variables(&mut self) -> Result<(), CompilerError<'input>> {
         let (function_variable_id, _) = self.current_function();
 
-        let scope = self.symbol_table.variable_scope(&function_variable_id);
+        let scope = self.symbol_table.function_scope(&function_variable_id);
 
         let mut parameter_index: u32 = 0;
 
@@ -353,15 +379,15 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 continue;
             }
 
+            if !variable.is_static() {
+                unreachable!("Only static variables are supported")
+            }
+
             let alloca = self
                 .builder
                 .build_alloca(self.val_type, variable.get_name())?;
 
             self.variables.insert(*variable_id, alloca);
-
-            if !variable.is_static() {
-                unreachable!("Only static variables are supported")
-            }
 
             if variable.is_parameter() {
                 let (_, function) = self.current_function();
@@ -385,7 +411,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     fn clear_variables(&mut self) -> Result<(), CompilerError<'input>> {
         let (function_variable_id, _) = self.current_function();
 
-        let scope = self.symbol_table.variable_scope(&function_variable_id);
+        let scope = self.symbol_table.function_scope(&function_variable_id);
 
         for variable_id in scope.variables.values() {
             let variable = self.symbol_table.variable(variable_id);
