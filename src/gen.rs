@@ -156,10 +156,10 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             } => {
                 let obj = self.get_value_for_variable(base)?;
 
-                let i = self.translate_expression(expression)?;
+                let i = self.translate_expression(expression)?.into_pointer_value();
 
                 let result_ptr = self
-                    .call_builtin("val_object_get", &[obj.into(), i.into()])?
+                    .call_builtin("val_get", &[obj.into(), i.into()])?
                     .into_pointer_value();
 
                 Ok(result_ptr.into())
@@ -214,9 +214,9 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             } => {
                 let obj = self.get_value_for_variable(base)?;
 
-                let i = self.translate_expression(expression)?;
+                let i = self.translate_expression(expression)?.into_pointer_value();
 
-                self.call_builtin("val_object_set", &[obj.into(), i.into(), v.into()])?;
+                self.call_builtin("val_set", &[obj.into(), i.into(), v.into()])?;
 
                 Ok(v)
             }

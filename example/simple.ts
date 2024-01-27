@@ -19,7 +19,7 @@ declare function echo(...s: any[]): void;
 // echo(x);
 // x = null;
 // echo (x);
-let obj = { a: 10, b: 'merhaba' };
-echo('start');
-obj.a = 20;
-echo(obj.a);
+let obj = { a: { a: 1, b: 2 }, b: 'merhaba' };
+let x = [4];
+
+echo(x[0]);

@@ -335,6 +335,39 @@ void *val_array_push(val_t *items, val_t *v) {
     return NULL;
 }
 
+void *val_array_insert(val_t *items, val_t *i, val_t *v) {
+    if (items->type != VAL_ARRAY) {
+        assert(false);
+    }
+
+    if (i->type != VAL_INT) {
+        assert(false);
+    }
+
+    void *old_value = array_get(&items->array, i->i64);;
+    if (old_value != NULL) {
+        unlink_val(old_value);
+    }
+
+    array_insert(&items->array, i->i64, v);
+
+    link_val(v);
+
+    return NULL;
+}
+
+void *val_array_get(val_t *items, val_t *i) {
+    if (items->type != VAL_ARRAY) {
+        assert(false);
+    }
+
+    if (i->type != VAL_INT) {
+        assert(false);
+    }
+
+    return array_get(&items->array, i->i64);
+}
+
 void *val_object_set(val_t *kv, char *k, val_t *v) {
     if (kv->type != VAL_OBJECT) {
         assert(false);
@@ -358,6 +391,47 @@ void *val_object_get(val_t *kv, char *k) {
     }
 
     return object_get(&kv->object, k);
+}
+
+void *val_set(val_t *kv, val_t *k, val_t *v) {
+    if (kv->type == VAL_ARRAY) {
+        return val_array_insert(kv, k, v);
+    }
+
+    if (kv->type != VAL_OBJECT) {
+        assert(false);
+    }
+
+    if (k->type != VAL_STR) {
+        assert(false);
+    }
+
+    val_t *old = object_get(&kv->object, k->str.data);
+    if (old != NULL) {
+        unlink_val(old);
+    }
+
+    object_set(&kv->object, k->str.data, v);
+
+    link_val(v);
+
+    return NULL;
+}
+
+void *val_get(val_t *kv, val_t *k) {
+    if (kv->type == VAL_ARRAY) {
+        return val_array_get(kv, k);
+    }
+
+    if (kv->type != VAL_OBJECT) {
+        assert(false);
+    }
+
+    if (k->type != VAL_STR) {
+        assert(false);
+    }
+
+    return object_get(&kv->object, k->str.data);
 }
 
 #endif
