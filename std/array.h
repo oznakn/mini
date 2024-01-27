@@ -38,11 +38,13 @@ static void array_insert(array_t *result, size_t index, void *v) {
 
     result->data[index] = v;
     result->len = result->len > index + 1 ? result->len : index + 1;
+
+    DEBUG("ARRAY: insert: %p, %p", result, v);
 }
 
 static void *array_get(array_t *result, size_t index) {
     if (index >= result->len) {
-        assert(false);
+        return NULL;
     }
 
     return result->data[index];
