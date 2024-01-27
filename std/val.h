@@ -104,7 +104,9 @@ val_t *val_get_type(val_t *v) {
 }
 
 val_t *val_get_value(val_t *v, char *key) {
-    return new_str_val("yey");
+    DEBUG("val_get_value: %s", key);
+
+    return object_get(&v->object, key);
 }
 
 #endif

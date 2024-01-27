@@ -135,6 +135,36 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         self.variables.get(variable_id).unwrap()
     }
 
+    fn compute_pointer_for_identifier(
+        &self,
+        identifier: &'input ast::VariableIdentifier<'input>,
+    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
+        let variable_id = self.symbol_table.identifier_ref(identifier);
+
+        let variable = self.symbol_table.variable(variable_id);
+
+        match variable {
+            st::Variable::Static { .. } => {
+                let ptr = self.variables.get(variable_id).unwrap();
+                let v = self.builder.build_load(*ptr, "temp")?;
+
+                Ok(v)
+            }
+            st::Variable::Computed { base, name } => {
+                let base_ptr = self.variables.get(base).unwrap();
+                let obj = self.builder.build_load(*base_ptr, "temp")?;
+
+                let s = self.builder.build_global_string_ptr(name, "string")?;
+
+                let result_ptr = self
+                    .call_builtin("val_get_value", &[obj.into(), s.as_pointer_value().into()])?
+                    .into_pointer_value();
+
+                Ok(result_ptr.into())
+            }
+        }
+    }
+
     fn init(&mut self) -> Result<(), CompilerError<'input>> {
         let builtin_functions = builtins::create_builtin_functions(self.context);
 
@@ -248,7 +278,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     ) -> Result<(), CompilerError<'input>> {
         self.current_function_index = Some(function_variable_id.to_owned());
 
-        let scope = self.symbol_table.function_scope(function_variable_id);
+        let scope = self.symbol_table.variable_scope(function_variable_id);
         let function = self.functions.get(function_variable_id).unwrap();
 
         let basic_block = self.context.append_basic_block(*function, "entry");
@@ -270,7 +300,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     fn define_variables(&mut self) -> Result<(), CompilerError<'input>> {
         let (function_variable_id, _) = self.current_function();
 
-        let scope = self.symbol_table.function_scope(&function_variable_id);
+        let scope = self.symbol_table.variable_scope(&function_variable_id);
 
         let mut parameter_index: u32 = 0;
 
@@ -286,6 +316,10 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 .build_alloca(self.val_type, variable.get_name())?;
 
             self.variables.insert(*variable_id, alloca);
+
+            if !variable.is_static() {
+                unreachable!("Only static variables are supported")
+            }
 
             if variable.is_parameter() {
                 let (_, function) = self.current_function();
@@ -309,7 +343,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     fn clear_variables(&mut self) -> Result<(), CompilerError<'input>> {
         let (function_variable_id, _) = self.current_function();
 
-        let scope = self.symbol_table.function_scope(&function_variable_id);
+        let scope = self.symbol_table.variable_scope(&function_variable_id);
 
         for variable_id in scope.variables.values() {
             let variable = self.symbol_table.variable(variable_id);
@@ -637,14 +671,9 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             }
 
             ast::Expression::VariableExpression { identifier, .. } => {
-                let ptr = self.get_pointer_for_identifier(identifier);
-                let obj = self.builder.build_load(*ptr, "temp")?;
+                let v = self.compute_pointer_for_identifier(identifier)?;
 
-                let v = self
-                    .call_builtin("val_get_value", &[obj.into()])?
-                    .into_pointer_value();
-
-                Ok(v.into())
+                Ok(v)
             }
 
             ast::Expression::AssignmentExpression {
