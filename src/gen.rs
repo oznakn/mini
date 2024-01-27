@@ -5,18 +5,27 @@ use generational_arena::Index;
 use indexmap::IndexMap;
 use inkwell::builder::Builder;
 use inkwell::context::Context;
+use inkwell::memory_buffer::MemoryBuffer;
 use inkwell::module::{Linkage, Module};
 use inkwell::targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetTriple};
-use inkwell::types::{BasicType, BasicTypeEnum, FunctionType};
-use inkwell::values::{BasicMetadataValueEnum, BasicValueEnum, FunctionValue, PointerValue};
-use inkwell::OptimizationLevel;
+use inkwell::types::{BasicType, BasicTypeEnum};
+use inkwell::values::{
+    AnyValue, BasicMetadataValueEnum, BasicValueEnum, FunctionValue, PointerValue,
+};
+use inkwell::{AddressSpace, OptimizationLevel};
 
 use crate::ast;
-use crate::builtins;
 use crate::error::CompilerError;
 use crate::st;
 
 const MAIN_FUNCTION_NAME: &str = "main";
+
+fn get_val_type<'ctx>(context: &'ctx Context) -> BasicTypeEnum<'ctx> {
+    context
+        .struct_type(&[context.i8_type().into()], true)
+        .ptr_type(AddressSpace::default())
+        .into()
+}
 
 fn new_function_label() -> String {
     static FUNCTION_COUNTER: AtomicUsize = AtomicUsize::new(0);
@@ -39,8 +48,6 @@ pub struct IRGenerator<'input, 'ctx> {
     functions: IndexMap<Index, FunctionValue<'ctx>>,
     variables: IndexMap<Index, PointerValue<'ctx>>,
 
-    builtin_functions: IndexMap<&'static str, FunctionValue<'ctx>>,
-
     current_function_index: Option<Index>,
 }
 
@@ -52,18 +59,23 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         optimize: bool,
         tmp_file: PathBuf,
     ) -> Result<(), CompilerError<'input>> {
-        let module = context.create_module("program");
+        let std_module_content =
+            MemoryBuffer::create_from_file(std::path::Path::new("./std.bc")).unwrap();
+        let module = context.create_module_from_ir(std_module_content).unwrap();
+
+        module.get_functions().into_iter().for_each(|function| {
+            function.set_linkage(Linkage::External);
+        });
 
         let mut ir_generator = IRGenerator {
             optimize,
             symbol_table,
-            val_type: builtins::get_val_type(context),
+            val_type: get_val_type(context),
             context,
             module,
             builder: context.create_builder(),
             functions: IndexMap::new(),
             variables: IndexMap::new(),
-            builtin_functions: IndexMap::new(),
             current_function_index: None,
         };
         ir_generator.init()?;
@@ -135,7 +147,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         match variable {
             st::Variable::Static { .. } => {
                 let ptr = self.variables.get(variable_id).unwrap();
-                let v = self.builder.build_load(*ptr, "temp")?;
+                let v = self.builder.build_load(self.val_type, *ptr, "temp")?;
 
                 Ok(v)
             }
@@ -187,7 +199,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             st::Variable::Static { .. } => {
                 let ptr = self.variables.get(variable_id).unwrap();
 
-                let old_value = self.builder.build_load(*ptr, "tmp")?;
+                let old_value = self.builder.build_load(self.val_type, *ptr, "tmp")?;
                 self.call_builtin("unlink_val", &[old_value.into()])?;
 
                 self.call_builtin("link_val", &[v.into()])?;
@@ -234,14 +246,6 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     }
 
     fn init(&mut self) -> Result<(), CompilerError<'input>> {
-        let builtin_functions = builtins::create_builtin_functions(self.context);
-
-        for (name, fn_type) in builtin_functions.iter() {
-            let fn_value = self.init_builtin_function(name.to_owned(), *fn_type)?;
-
-            self.builtin_functions.insert(name, fn_value);
-        }
-
         for variable_id in self.symbol_table.variables() {
             let variable = self.symbol_table.variable(&variable_id);
 
@@ -254,18 +258,6 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         }
 
         Ok(())
-    }
-
-    fn init_builtin_function(
-        &self,
-        name: &str,
-        fn_type: FunctionType<'ctx>,
-    ) -> Result<FunctionValue<'ctx>, CompilerError<'input>> {
-        let fn_value = self
-            .module
-            .add_function(name, fn_type, Some(Linkage::ExternalWeak));
-
-        Ok(fn_value)
     }
 
     fn init_function(
@@ -282,11 +274,17 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             new_function_label()
         };
 
-        let linkage = if function.is_external() {
+        let linkage = if self.symbol_table.main_function.unwrap() == function_variable_id {
+            Linkage::External
+        } else if function.is_external() {
             Linkage::ExternalWeak
         } else {
             Linkage::External
         };
+
+        if self.module.get_function(&func_name).is_some() {
+            return Ok(self.module.get_function(&func_name).unwrap());
+        }
 
         if let ast::VariableKind::Function { parameters, .. } = function.get_kind() {
             let parameters = vec![self.val_type.as_basic_type_enum()]
@@ -328,16 +326,15 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         name: &'input str,
         args: &[BasicMetadataValueEnum<'ctx>],
     ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
-        let function = self.builtin_functions.get(name).unwrap();
+        let function = self.module.get_function(name).unwrap();
 
         let v = self
             .builder
-            .build_call(*function, args, "tmp")?
-            .try_as_basic_value()
-            .left()
-            .unwrap();
+            .build_call(function, args, "tmp")?
+            .as_any_value_enum()
+            .into_pointer_value();
 
-        Ok(v)
+        Ok(v.into())
     }
 
     fn visit_function(
@@ -422,7 +419,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
             let ptr = self.variables.get(variable_id).unwrap();
 
-            let v = self.builder.build_load(*ptr, "tmp")?;
+            let v = self.builder.build_load(self.val_type, *ptr, "tmp")?;
             self.call_builtin("unlink_val", &[v.into()])?;
         }
 

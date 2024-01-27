@@ -29,7 +29,7 @@ static void free_val_if_ok(val_t *val) {
     }
 }
 
-void link_val(val_t *val) {
+void *link_val(val_t *val) {
     if (val != NULL && val->type != VAL_NULL && val->type != VAL_BOOL) {
         active_val_count++;
         val->ref_count++;
@@ -39,9 +39,11 @@ void link_val(val_t *val) {
 
         DEBUG("link: %p, type: %d, active: %d", val, val->type, active_val_count);
     }
+
+    return NULL;
 }
 
-void unlink_val(val_t *val) {
+void *unlink_val(val_t *val) {
     if (val != NULL && val->type != VAL_NULL && val->type != VAL_BOOL) {
         active_val_count--;
         val->ref_count--;
@@ -55,6 +57,8 @@ void unlink_val(val_t *val) {
 
         DEBUG("unlink: %p, type: %d, active: %d", val, val->type, active_val_count);
     }
+
+    return NULL;
 }
 
 #endif

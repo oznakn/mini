@@ -3,8 +3,8 @@
 
 #include "defs.h"
 
-void link_val(val_t *val);
-void unlink_val(val_t *val);
+void *link_val(val_t *val);
+void *unlink_val(val_t *val);
 
 static void free_object(object_t *kv) {
     free(kv->keys);

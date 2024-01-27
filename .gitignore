@@ -2,6 +2,7 @@ target/
 .DS_Store
 
 *.o
+*.bc
 foo
 
 /library/example/*
