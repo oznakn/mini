@@ -340,6 +340,11 @@ void *val_object_set(val_t *kv, char *k, val_t *v) {
         assert(false);
     }
 
+    val_t *old = object_get(&kv->object, k);
+    if (old != NULL) {
+        unlink_val(old);
+    }
+
     object_set(&kv->object, k, v);
 
     link_val(v);

@@ -20,4 +20,6 @@ declare function echo(...s: any[]): void;
 // x = null;
 // echo (x);
 let obj = { a: 10, b: 'merhaba' };
+echo('start');
+obj.a = 20;
 echo(obj.a);

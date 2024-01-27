@@ -126,21 +126,10 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         self.variables.get(variable_id).unwrap()
     }
 
-    fn get_pointer_for_identifier(
+    fn get_value_for_variable(
         &self,
-        identifier: &'input ast::VariableIdentifier<'input>,
-    ) -> &PointerValue<'ctx> {
-        let variable_id = self.symbol_table.identifier_ref(identifier);
-
-        self.variables.get(variable_id).unwrap()
-    }
-
-    fn compute_pointer_for_identifier(
-        &self,
-        identifier: &'input ast::VariableIdentifier<'input>,
+        variable_id: &Index,
     ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
-        let variable_id = self.symbol_table.identifier_ref(identifier);
-
         let variable = self.symbol_table.variable(variable_id);
 
         match variable {
@@ -151,18 +140,71 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 Ok(v)
             }
             st::Variable::Computed { base, name } => {
-                let base_ptr = self.variables.get(base).unwrap();
-                let obj = self.builder.build_load(*base_ptr, "temp")?;
+                let obj = self.get_value_for_variable(base)?;
 
                 let s = self.builder.build_global_string_ptr(name, "string")?;
 
                 let result_ptr = self
-                    .call_builtin("val_get_value", &[obj.into(), s.as_pointer_value().into()])?
+                    .call_builtin("val_object_get", &[obj.into(), s.as_pointer_value().into()])?
                     .into_pointer_value();
 
                 Ok(result_ptr.into())
             }
         }
+    }
+
+    fn get_value_for_identifier(
+        &self,
+        identifier: &'input ast::VariableIdentifier<'input>,
+    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
+        let variable_id = self.symbol_table.identifier_ref(identifier);
+
+        self.get_value_for_variable(variable_id)
+    }
+
+    fn set_value_for_variable(
+        &self,
+        variable_id: &Index,
+        v: BasicValueEnum<'ctx>,
+    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
+        let variable = self.symbol_table.variable(variable_id);
+
+        match variable {
+            st::Variable::Static { .. } => {
+                let ptr = self.variables.get(variable_id).unwrap();
+
+                let old_value = self.builder.build_load(*ptr, "tmp")?;
+                self.call_builtin("unlink_val", &[old_value.into()])?;
+
+                self.call_builtin("link_val", &[v.into()])?;
+
+                self.builder.build_store(*ptr, v)?;
+
+                Ok(v)
+            }
+            st::Variable::Computed { base, name } => {
+                let obj = self.get_value_for_variable(base)?;
+
+                let s = self.builder.build_global_string_ptr(name, "string")?;
+
+                self.call_builtin(
+                    "val_object_set",
+                    &[obj.into(), s.as_pointer_value().into(), v.into()],
+                )?;
+
+                Ok(v)
+            }
+        }
+    }
+
+    fn set_value_for_identifier(
+        &self,
+        identifier: &'input ast::VariableIdentifier<'input>,
+        v: BasicValueEnum<'ctx>,
+    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
+        let variable_id = self.symbol_table.identifier_ref(identifier);
+
+        self.set_value_for_variable(variable_id, v)
     }
 
     fn init(&mut self) -> Result<(), CompilerError<'input>> {
@@ -671,7 +713,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             }
 
             ast::Expression::VariableExpression { identifier, .. } => {
-                let v = self.compute_pointer_for_identifier(identifier)?;
+                let v = self.get_value_for_identifier(identifier)?;
 
                 Ok(v)
             }
@@ -681,17 +723,9 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
                 expression,
                 ..
             } => {
-                let ptr = self.get_pointer_for_identifier(identifier);
-
-                let v = self.builder.build_load(*ptr, "tmp")?;
-                self.call_builtin("unlink_val", &[v.into()])?;
-
                 let v = self.translate_expression(expression)?;
-                self.call_builtin("link_val", &[v.into()])?;
 
-                self.builder.build_store(*ptr, v)?;
-
-                Ok(v)
+                self.set_value_for_identifier(identifier, v)
             }
 
             ast::Expression::Empty => unreachable!("Empty expression"),

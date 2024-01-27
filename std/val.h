@@ -103,10 +103,4 @@ val_t *val_get_type(val_t *v) {
     return result;
 }
 
-val_t *val_get_value(val_t *v, char *key) {
-    DEBUG("val_get_value: %s", key);
-
-    return object_get(&v->object, key);
-}
-
 #endif

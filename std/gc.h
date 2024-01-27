@@ -22,7 +22,7 @@ static void free_val_if_ok(val_t *val) {
                 unlink_val(val->object.vals[i]);
             }
 
-            free_array(&val->array);
+            free_object(&val->object);
         }
 
         free(val);

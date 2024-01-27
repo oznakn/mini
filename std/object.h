@@ -21,7 +21,15 @@ static void new_object(object_t *result) {
     result->vals = vals;
 }
 
-static void object_set(object_t *result, char *k, void *v) {
+static bool object_set(object_t *result, char *k, void *v) {
+    for (size_t i = 0; i < result->len; i++) {
+        if (strcmp(result->keys[i], k) == 0) {
+            result->vals[i] = v;
+
+            return false; // means we didn't add a new key
+        }
+    }
+
     if (result->len == result->capacity) {
         result->capacity *= 2;
         result->keys = realloc(result->keys, result->capacity * sizeof(void *));
@@ -31,6 +39,8 @@ static void object_set(object_t *result, char *k, void *v) {
     result->keys[result->len] = k;
     result->vals[result->len] = v;
     result->len++;
+
+    return true; // means we added a new key
 }
 
 static void *object_get(object_t *result, char *k) {
