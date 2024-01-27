@@ -51,11 +51,11 @@ void *unlink_val(val_t *val) {
         assert(active_val_count >= 0);
         assert(val->ref_count >= 0);
 
+        DEBUG("unlink: %p, type: %d, active: %d", val, val->type, active_val_count);
+
         if (val->ref_count == 0) {
             free_val_if_ok(val);
         }
-
-        DEBUG("unlink: %p, type: %d, active: %d", val, val->type, active_val_count);
     }
 
     return NULL;
