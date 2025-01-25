@@ -10,13 +10,17 @@ use crate::gen;
 use crate::parser;
 use crate::st;
 
+const STD_LIBRARY_CODE: &str = include_str!("../std/std.ts");
+
 fn compile(matches: &clap::ArgMatches) -> Result<(), String> {
     let input_file = matches
         .value_of("input")
         .ok_or_else(|| "No input file provided".to_string())?;
 
-    let content =
+    let mut content =
         fs::read_to_string(input_file).map_err(|_| format!("File not found: {}", input_file))?;
+
+    content = format!("{}\n\n{}", STD_LIBRARY_CODE, content);
 
     let program = parser::ProgramParser::new()
         .parse(&content)

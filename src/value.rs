@@ -14,6 +14,7 @@ pub enum VariableKind {
     String,
     Number,
     Object,
+    Class,
     Function {
         parameters: Vec<ParameterKind>,
         return_kind: Box<VariableKind>,
@@ -43,6 +44,7 @@ impl VariableKind {
             VariableKind::String => "string",
             VariableKind::Number { .. } => "number",
             VariableKind::Object { .. } => "object",
+            VariableKind::Class { .. } => "class",
             VariableKind::Function { .. } => "function",
             VariableKind::Array { .. } => "object",
         }

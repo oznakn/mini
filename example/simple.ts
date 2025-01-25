@@ -1,5 +1,7 @@
 declare function echo(...s: any[]): void;
 
+new TestClass();
+
 // function f(a: number, b?: string) {
 //     echo(a, b);
 // }
@@ -8,8 +10,9 @@ declare function echo(...s: any[]): void;
 // echo(s);
 // f(10, 'merhaba');
 
-5+10;
-echo([55, 10, 15]);
+// let x = [55, 10, 15];
+// x[5] = 100;
+// echo(x);
 
 // echo(10 * 10);
 // echo(10 / 10.5);
@@ -22,5 +25,4 @@ echo([55, 10, 15]);
 // echo (x);
 // let obj = { a: { a: 1, b: 2 }, b: 'merhaba' };
 // let x = [4];
-
-// echo(x);
+// echo(typeof x);

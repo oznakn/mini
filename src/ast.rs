@@ -76,6 +76,12 @@ pub enum Statement<'input> {
         definition: VariableDefinition<'input>,
         parameters: Vec<VariableDefinition<'input>>,
         statements: Vec<Statement<'input>>,
+        is_class_method: bool,
+    },
+    ClassStatement {
+        location: (usize, usize),
+        definition: VariableDefinition<'input>,
+        statements: Vec<Statement<'input>>,
     },
     ReturnStatement {
         location: (usize, usize),
@@ -107,6 +113,11 @@ pub enum Expression<'input> {
         identifier: VariableIdentifier<'input>,
     },
     CallExpression {
+        location: (usize, usize),
+        identifier: VariableIdentifier<'input>,
+        arguments: Vec<Expression<'input>>,
+    },
+    NewExpression {
         location: (usize, usize),
         identifier: VariableIdentifier<'input>,
         arguments: Vec<Expression<'input>>,

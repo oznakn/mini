@@ -13,6 +13,7 @@ pub enum CompilerError<'input> {
     CodeGenError(String),
     VariableAlreadyDefined(&'input str),
     VariableNotDefined(&'input str),
+    InvalidClassCall(&'input str),
     InvalidFunctionCall(&'input str),
     InvalidNumberOfArguments(&'input str, usize, usize),
     VariableTypeCannotBeInfered(&'input str),
@@ -66,6 +67,14 @@ impl<'input> fmt::Display for CompilerError<'input> {
                     "{} variable `{}` not defined",
                     "error:".red(),
                     v.yellow()
+                )
+            }
+            CompilerError::InvalidClassCall(v) => {
+                write!(
+                    f,
+                    "{} new call on variable `{}` invalid",
+                    "error:".red(),
+                    v.yellow(),
                 )
             }
             CompilerError::InvalidFunctionCall(v) => {

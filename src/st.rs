@@ -76,6 +76,16 @@ impl<'input> Variable<'input> {
         }
     }
 
+    pub fn is_class(&self) -> bool {
+        match &self {
+            Variable::Static { definition, .. } => match &definition.kind {
+                ast::VariableKind::Class => true,
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
     pub fn get_parameters(&self) -> &Vec<ast::ParameterKind> {
         match &self {
             Variable::Static { definition, .. } => match &definition.kind {
@@ -94,7 +104,7 @@ pub struct SymbolTable<'input> {
     scope_arena: Arena<Scope<'input>>,
     variable_arena: Arena<Variable<'input>>,
 
-    function_scope_map: IndexMap<Index, Index>,
+    variable_scope_map: IndexMap<Index, Index>,
 
     definition_ref_map: IndexMap<ByAddress<&'input ast::VariableDefinition<'input>>, Index>,
     identifier_ref_map: IndexMap<ByAddress<&'input ast::VariableIdentifier<'input>>, Index>,
@@ -109,7 +119,7 @@ impl<'input> SymbolTable<'input> {
             main_function: None,
             scope_arena: Arena::new(),
             variable_arena: Arena::new(),
-            function_scope_map: IndexMap::new(),
+            variable_scope_map: IndexMap::new(),
             definition_ref_map: IndexMap::new(),
             identifier_ref_map: IndexMap::new(),
         };
@@ -148,14 +158,20 @@ impl<'input> SymbolTable<'input> {
         self.variable_arena.get_mut(*variable_id).unwrap()
     }
 
-    pub fn function_scope(&self, function_id: &Index) -> &Scope<'input> {
-        let scope_id = self.function_scope_map.get(function_id).unwrap();
+    pub fn variable_scope_id(&self, variable_id: &Index) -> Index {
+        let scope_id = self.variable_scope_map.get(variable_id).unwrap();
+
+        scope_id.to_owned()
+    }
+
+    pub fn variable_scope(&self, variable_id: &Index) -> &Scope<'input> {
+        let scope_id = self.variable_scope_map.get(variable_id).unwrap();
 
         self.scope(scope_id)
     }
 
-    fn set_function_scope(&mut self, function_id: &Index, scope_id: &Index) {
-        self.function_scope_map.insert(*function_id, *scope_id);
+    fn set_variable_scope(&mut self, variable_id: &Index, scope_id: &Index) {
+        self.variable_scope_map.insert(*variable_id, *scope_id);
     }
 
     pub fn definition_ref(&self, definition: &'input ast::VariableDefinition<'input>) -> &Index {
@@ -216,18 +232,18 @@ impl<'input> SymbolTable<'input> {
         definition: &'input ast::VariableDefinition<'input>,
         statements: &'input Vec<ast::Statement<'input>>,
     ) -> Result<(Index, Index), CompilerError<'input>> {
-        let function_scope_id = self.scope_arena.insert(Scope {
+        let variable_scope_id = self.scope_arena.insert(Scope {
             parent_scope: scope_id.map(|s| s.to_owned()),
             statements: Some(statements),
             variables: IndexMap::new(),
         });
 
-        let variable_scope_id = scope_id.unwrap_or(&function_scope_id);
-        let variable_id = self.create_static_variable(&variable_scope_id, definition, false)?;
+        let variable_id =
+            self.create_static_variable(scope_id.unwrap_or(&variable_scope_id), definition, false)?;
 
-        self.set_function_scope(&variable_id, &function_scope_id);
+        self.set_variable_scope(&variable_id, &variable_scope_id);
 
-        Ok((variable_id, function_scope_id.to_owned()))
+        Ok((variable_id, variable_scope_id.to_owned()))
     }
 
     fn create_property_variable(
@@ -268,16 +284,27 @@ impl<'input> SymbolTable<'input> {
                         statements,
                         ..
                     } => {
-                        let (_, function_scope_id) =
+                        let (_, variable_scope_id) =
                             self.create_function(Some(scope_id), definition, statements)?;
 
                         if !definition.is_external {
                             for parameter in parameters {
-                                self.create_static_variable(&function_scope_id, parameter, true)?;
+                                self.create_static_variable(&variable_scope_id, parameter, true)?;
                             }
 
-                            self.build_scope(&function_scope_id)?;
+                            self.build_scope(&variable_scope_id)?;
                         }
+                    }
+
+                    ast::Statement::ClassStatement {
+                        definition,
+                        statements,
+                        ..
+                    } => {
+                        let (_, variable_scope_id) =
+                            self.create_function(Some(scope_id), definition, statements)?;
+
+                        self.build_scope(&variable_scope_id)?;
                     }
 
                     ast::Statement::DefinitionStatement { definition, .. } => {
@@ -298,7 +325,7 @@ impl<'input> SymbolTable<'input> {
 }
 
 impl<'input> SymbolTable<'input> {
-    fn fetch_variable_by_name(
+    pub fn fetch_variable_by_name(
         &mut self,
         scope_id: &Index,
         name: &'input str,
@@ -317,7 +344,7 @@ impl<'input> SymbolTable<'input> {
         Err(CompilerError::VariableNotDefined(name))
     }
 
-    fn fetch_variable_by_identifier(
+    pub fn fetch_variable_by_identifier(
         &mut self,
         scope_id: &Index,
         identifier: &'input ast::VariableIdentifier<'input>,
@@ -407,6 +434,35 @@ impl<'input> SymbolTable<'input> {
                 }
             }
 
+            ast::Expression::NewExpression {
+                identifier,
+                arguments,
+                ..
+            } => {
+                for argument in arguments {
+                    self.visit_expression(scope_id, argument)?;
+                }
+
+                let variable_id = self.fetch_variable_by_identifier(scope_id, identifier)?;
+                let variable = self.variable(&variable_id);
+                let variable_scope_id = self.variable_scope_id(&variable_id);
+
+                match &variable {
+                    Variable::Static { definition, .. } => match &definition.kind {
+                        ast::VariableKind::Class { .. } => {
+                            let constructor_variable_id =
+                                self.fetch_variable_by_name(&variable_scope_id, "constructor")?;
+
+                            dbg!(&identifier, &variable_id, &constructor_variable_id);
+
+                            self.set_identifier_ref(identifier, &constructor_variable_id);
+                        }
+                        _ => return Err(CompilerError::InvalidClassCall(definition.name)),
+                    },
+                    _ => unreachable!("Invalid Class call"),
+                }
+            }
+
             ast::Expression::Empty => unreachable!("Empty expression"),
         }
 
@@ -434,6 +490,8 @@ impl<'input> SymbolTable<'input> {
                     self.visit_expression(scope_id, expression)?;
                 }
             }
+
+            ast::Statement::ClassStatement { .. } => {} // the function statements will be visited by visit_scopes
 
             ast::Statement::FunctionStatement { .. } => {} // the function statements will be visited by visit_scopes
 

@@ -49,7 +49,8 @@ match {
     "undefined",
 
     "typeof",
-
+    "class",
+    "new",
     "return",
     "void",
     "declare",
@@ -94,6 +95,66 @@ Statement: ast::Statement<'input> = {
     DefinitionStatement,
     FunctionStatement,
     ReturnStatement,
+    ClassStatement,
+};
+
+ClassFunctionStatement: ast::Statement<'input> = {
+    <l1:@L> <decorators:FunctionDecorators> <ll1:@L> <name:IdentifierName> <ll2:@R> "(" <parameters:CommaList<FunctionParameter>> ")" <return_kind:(":" <FunctionReturnKind>)?> <l2:@R> <statements:Body> => {
+        let this_definition = ast::VariableDefinition {
+            location: (l1, l2),
+            name,
+            kind: ast::VariableKind::Any,
+            is_writable: false,
+            is_external: false,
+            decorators: IndexSet::new(),
+        };
+        let this_param_kind = ast::ParameterKind {
+            sub_kind: ast::VariableKind::Any,
+            is_optional: false,
+            is_rest: false,
+        };
+        let mut parameters = parameters;
+        parameters.insert(0, (this_definition, this_param_kind));
+
+        ast::Statement::FunctionStatement {
+            location: (l1, l2),
+            is_class_method: true,
+            definition: ast::VariableDefinition {
+                location: (ll1, ll2),
+                name,
+                kind: ast::VariableKind::Function {
+                    return_kind: Box::new(return_kind.unwrap_or(ast::VariableKind::Any)),
+                    parameters: parameters
+                        .iter()
+                        .map(|(_, p)| p.clone())
+                        .collect(),
+                },
+                is_writable: false,
+                is_external: false,
+                decorators,
+            },
+            parameters: parameters
+                .iter()
+                .map(|(p, _)| p.clone())
+                .collect(),
+            statements: Vec::new(),
+        }
+    },
+};
+
+ClassStatement: ast::Statement<'input> = {
+    <l1:@L> "class" <ll1:@L> <name:IdentifierName> <ll2:@R> <l2:@R> "{" <body:ClassFunctionStatement*> "}" => ast::Statement::ClassStatement {
+        location: (l1, l2),
+        definition: ast::VariableDefinition {
+            location: (ll1, ll2),
+            name,
+            kind: ast::VariableKind::Class,
+            is_writable: false,
+            is_external: false,
+            decorators: IndexSet::new(),
+        },
+        statements: body,
+    }
 };
 
 FunctionReturnKind: ast::VariableKind = {
@@ -133,6 +194,7 @@ FunctionParameter: (ast::VariableDefinition<'input>, ast::ParameterKind) = {
 FunctionStatement: ast::Statement<'input> = {
     <l1:@L> <decorators:FunctionDecorators> "declare" "function" <ll1:@L> <name:IdentifierName> <ll2:@R> "(" <parameters:CommaList<FunctionParameter>> ")" <return_kind:(":" <FunctionReturnKind>)?> ";" <l2:@R> => ast::Statement::FunctionStatement {
         location: (l1, l2),
+        is_class_method: false,
         definition: ast::VariableDefinition {
             location: (ll1, ll2),
             name,
@@ -156,6 +218,7 @@ FunctionStatement: ast::Statement<'input> = {
 
     <l1:@L> <decorators:FunctionDecorators> "function" <ll1:@L> <name:IdentifierName> <ll2:@R> "(" <parameters:CommaList<FunctionParameter>> ")" <return_kind:(":" <FunctionReturnKind>)?> <l2:@R> <statements:Body> => ast::Statement::FunctionStatement {
         location: (l1, l2),
+        is_class_method: false,
         definition: ast::VariableDefinition {
             location: (ll1, ll2),
             name,
@@ -204,6 +267,7 @@ DefinitionStatement: ast::Statement<'input> = {
 }
 
 Expression: ast::Expression<'input> = {
+    NewExpression,
     AssignmentExpression,
     ArrayExpression,
     ObjectExpression,
@@ -219,6 +283,13 @@ ObjectExpression: ast::Expression<'input> =
     <l1:@L> "{" <properties:CommaList<PropertyDefinition>> "}" <l2:@R> => ast::Expression::ObjectExpression {
         location: (l1, l2),
         properties: properties.into_iter().collect::<IndexMap<_, _>>(),
+    };
+
+NewExpression: ast::Expression<'input> =
+    <l1:@L> "new" <identifier:VariableIdentifier> <l2:@R> "(" <arguments:CommaList<Expression>> ")" => ast::Expression::NewExpression {
+        location: (l1, l2),
+        identifier,
+        arguments,
     };
 
 TypeOfExpression: ast::Expression<'input> =

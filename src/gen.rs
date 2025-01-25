@@ -358,7 +358,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     ) -> Result<(), CompilerError<'input>> {
         self.current_function_index = Some(function_variable_id.to_owned());
 
-        let scope = self.symbol_table.function_scope(function_variable_id);
+        let scope = self.symbol_table.variable_scope(function_variable_id);
         let function = self.functions.get(function_variable_id).unwrap();
 
         let basic_block = self.context.append_basic_block(*function, "entry");
@@ -380,7 +380,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     fn define_variables(&mut self) -> Result<(), CompilerError<'input>> {
         let (function_variable_id, _) = self.current_function();
 
-        let scope = self.symbol_table.function_scope(&function_variable_id);
+        let scope = self.symbol_table.variable_scope(&function_variable_id);
 
         let mut parameter_index: u32 = 0;
 
@@ -423,7 +423,7 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
     fn clear_variables(&mut self) -> Result<(), CompilerError<'input>> {
         let (function_variable_id, _) = self.current_function();
 
-        let scope = self.symbol_table.function_scope(&function_variable_id);
+        let scope = self.symbol_table.variable_scope(&function_variable_id);
 
         for variable_id in scope.variables.values() {
             let variable = self.symbol_table.variable(variable_id);
@@ -481,6 +481,8 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
 
                 self.builder.build_store(*ptr, v)?;
             }
+
+            ast::Statement::ClassStatement { .. } => {} // functions are handled in visit_function
 
             ast::Statement::FunctionStatement { .. } => {} // functions are handled in visit_function
 
@@ -659,6 +661,45 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
         }
     }
 
+    fn translate_new_expression(
+        &self,
+        expression: &'input ast::Expression<'input>,
+    ) -> Result<BasicValueEnum<'ctx>, CompilerError<'input>> {
+        if let ast::Expression::NewExpression {
+            identifier,
+            arguments,
+            ..
+        } = expression
+        {
+            let obj = self
+                .call_builtin("new_object_val", &[])?
+                .into_pointer_value();
+
+            let constructor_variable_id = self.symbol_table.identifier_ref(identifier);
+
+            let mut argument_values: Vec<BasicMetadataValueEnum<'ctx>> = Vec::new();
+            argument_values.push(obj.into());
+            for arg in arguments {
+                let v = self.translate_expression(arg)?;
+
+                argument_values.push(v.into())
+            }
+
+            let fn_value = self.functions.get(constructor_variable_id).unwrap();
+            dbg!(&identifier, &fn_value.get_name());
+            let v = self
+                .builder
+                .build_call(*fn_value, &argument_values.as_slice(), "tmp")?
+                .try_as_basic_value()
+                .left()
+                .unwrap();
+
+            Ok(v)
+        } else {
+            unreachable!()
+        }
+    }
+
     fn translate_expression(
         &self,
         expression: &'input ast::Expression<'input>,
@@ -720,6 +761,8 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             ast::Expression::UnaryExpression { .. } => self.translate_unary_expression(expression),
 
             ast::Expression::CallExpression { .. } => self.translate_call_expression(expression),
+
+            ast::Expression::NewExpression { .. } => self.translate_new_expression(expression),
 
             ast::Expression::ObjectExpression { .. } => {
                 self.translate_object_expression(expression)
