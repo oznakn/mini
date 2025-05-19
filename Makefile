@@ -7,7 +7,7 @@ run: build
 
 test: build
 	./target/debug/mini example/simple.ts
-	./foo
+	./bin
 
 release:
 	/opt/homebrew/opt/llvm/bin/clang -c -emit-llvm std/std.c

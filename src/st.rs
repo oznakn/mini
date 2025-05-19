@@ -453,8 +453,6 @@ impl<'input> SymbolTable<'input> {
                             let constructor_variable_id =
                                 self.fetch_variable_by_name(&variable_scope_id, "constructor")?;
 
-                            dbg!(&identifier, &variable_id, &constructor_variable_id);
-
                             self.set_identifier_ref(identifier, &constructor_variable_id);
                         }
                         _ => return Err(CompilerError::InvalidClassCall(definition.name)),

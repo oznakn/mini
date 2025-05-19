@@ -76,7 +76,7 @@ pub fn run() {
                 .long("output")
                 .short('o')
                 .takes_value(true)
-                .default_value("foo")
+                .default_value("bin")
                 .help("Output file"),
         )
         .arg(

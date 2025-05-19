@@ -1,23 +1,25 @@
+// @ts-nocheck
+
 declare function echo(...s: any[]): void;
 
 new TestClass();
 
-// function f(a: number, b?: string) {
-//     echo(a, b);
-// }
+function f(a: number, b?: string) {
+    echo(a, b);
+}
 
-// let s = 'selam' + '1';
-// echo(s);
-// f(10, 'merhaba');
+let s = 'selam' + '1';
+echo(s);
+f(10, 'merhaba');
 
 // let x = [55, 10, 15];
 // x[5] = 100;
 // echo(x);
 
-// echo(10 * 10);
-// echo(10 / 10.5);
-// echo(10 / 10);
-// echo(5);
+echo(10 * 10);
+echo(10 / 10.5);
+echo(10 / 10);
+echo(5);
 
 // let x;
 // echo(x);

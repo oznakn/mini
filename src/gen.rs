@@ -686,7 +686,6 @@ impl<'input, 'ctx> IRGenerator<'input, 'ctx> {
             }
 
             let fn_value = self.functions.get(constructor_variable_id).unwrap();
-            dbg!(&identifier, &fn_value.get_name());
             let v = self
                 .builder
                 .build_call(*fn_value, &argument_values.as_slice(), "tmp")?

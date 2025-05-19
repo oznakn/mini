@@ -10,7 +10,7 @@ clap = { version = "3.2.23" }
 colored = { version = "2.0.0" }
 generational-arena = { version = "0.2.9" }
 indexmap = { version = "2.1.0" }
-inkwell = { version = "0.3.0", features = ["llvm17-0"] }
+inkwell = { version = "0.4.0", features = ["llvm17-0"] }
 lalrpop-util = { version = "0.20.0", features = ["lexer"] }
 target-lexicon = { version = "0.12.13" }
 tempfile = { version = "3.9.0" }
